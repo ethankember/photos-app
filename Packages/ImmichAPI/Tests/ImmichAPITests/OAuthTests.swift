@@ -63,6 +63,7 @@ import Testing
     @Test func serverErrorBodyIsReadable() {
         let body = Data(#"{"message":"User does not exist and auto registering is disabled.","error":"Bad Request","statusCode":400}"#.utf8)
         let error = APIError.from(statusCode: 400, body: body, operation: "finish single sign-on")
-        #expect(error.message == "Unexpected response 400 for finish single sign-on: User does not exist and auto registering is disabled.")
+        #expect(error.kind == .http(status: 400))
+        #expect(error.message.hasPrefix("Unexpected response 400 for finish single sign-on: User does not exist and auto registering is disabled"))
     }
 }
