@@ -12,7 +12,7 @@ public struct ServerVersion: Comparable, Sendable, CustomStringConvertible {
     }
 
     /// The Immich release `api/immich-openapi-specs.json` came from.
-    public static let generatedFrom = ServerVersion(major: 3, minor: 3, patch: 5)
+    public static let generatedFrom = ServerVersion(major: 3, minor: 4, patch: 1)
 
     public var description: String { "\(major).\(minor).\(patch)" }
 

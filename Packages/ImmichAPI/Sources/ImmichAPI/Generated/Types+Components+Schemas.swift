@@ -4211,6 +4211,10 @@ extension Components {
         }
         /// - Remark: Generated from `#/components/schemas/ServerVersionResponseDto`.
         public struct ServerVersionResponseDto: Codable, Hashable, Sendable {
+            /// Highest feature level supported by the server, which increments independently of the release version
+            ///
+            /// - Remark: Generated from `#/components/schemas/ServerVersionResponseDto/featureLevel`.
+            public var featureLevel: Swift.Int
             /// Major version number
             ///
             /// - Remark: Generated from `#/components/schemas/ServerVersionResponseDto/major`.
@@ -4230,22 +4234,26 @@ extension Components {
             /// Creates a new `ServerVersionResponseDto`.
             ///
             /// - Parameters:
+            ///   - featureLevel: Highest feature level supported by the server, which increments independently of the release version
             ///   - major: Major version number
             ///   - minor: Minor version number
             ///   - patch: Patch version number
             ///   - prerelease: Pre-release version number
             public init(
+                featureLevel: Swift.Int,
                 major: Swift.Int,
                 minor: Swift.Int,
                 patch: Swift.Int,
                 prerelease: Swift.Int? = nil
             ) {
+                self.featureLevel = featureLevel
                 self.major = major
                 self.minor = minor
                 self.patch = patch
                 self.prerelease = prerelease
             }
             public enum CodingKeys: String, CodingKey {
+                case featureLevel
                 case major
                 case minor
                 case patch

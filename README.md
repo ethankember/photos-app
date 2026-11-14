@@ -10,7 +10,7 @@
 ![Status](https://img.shields.io/badge/status-beta-orange?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/iOS-18%2B%20·%20iOS%2026%20Liquid%20Glass-black?style=for-the-badge)
 ![Swift](https://img.shields.io/badge/Swift-6%20strict%20concurrency-F05138?style=for-the-badge&logo=swift&logoColor=white)
-![Server](https://img.shields.io/badge/server-Immich%203.3.5-4250AF?style=for-the-badge)
+![Server](https://img.shields.io/badge/server-Immich%203.4.1-4250AF?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-GPL--3.0-green?style=for-the-badge)
 
 </div>
@@ -136,7 +136,7 @@ Photos and personal details are blurred.
 
 ## Recommended server setup
 
-- **[Immich](https://immich.app) v3.3.5** in Docker. A **Raspberry Pi 4 with 2 GB** works. The app keeps to 4 thumbnail requests and 2 uploads at a time.
+- **[Immich](https://immich.app) v3.4.1** in Docker. A **Raspberry Pi 4 with 2 GB** works. The app keeps to 4 thumbnail requests and 2 uploads at a time.
 - **Storage:** an SSD over USB 3. Keep the Pi on Ethernet, with a DHCP reservation so its home address never changes.
 - **Away from home:** [Tailscale](https://tailscale.com) on the server and the phone. The app tries the home address first (1.5 s), then the Tailscale address.
 - **Reliability on small boards:**

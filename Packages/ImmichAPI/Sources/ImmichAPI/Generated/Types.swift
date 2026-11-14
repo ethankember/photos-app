@@ -53,7 +53,6 @@ public protocol APIProtocol: Sendable {
     ///
     /// - Remark: HTTP `PUT /assets`.
     /// - Remark: Generated from `#/paths//assets/put(updateAssets)`.
-    @available(*, deprecated)
     func updateAssets(_ input: Operations.UpdateAssets.Input) async throws -> Operations.UpdateAssets.Output
     /// Delete assets
     ///
@@ -208,7 +207,6 @@ public protocol APIProtocol: Sendable {
     ///
     /// - Remark: HTTP `PUT /people/{id}`.
     /// - Remark: Generated from `#/paths//people/{id}/put(updatePerson)`.
-    @available(*, deprecated)
     func updatePerson(_ input: Operations.UpdatePerson.Input) async throws -> Operations.UpdatePerson.Output
     /// Search assets by metadata
     ///
@@ -445,7 +443,6 @@ extension APIProtocol {
     ///
     /// - Remark: HTTP `PUT /assets`.
     /// - Remark: Generated from `#/paths//assets/put(updateAssets)`.
-    @available(*, deprecated)
     public func updateAssets(body: Operations.UpdateAssets.Input.Body) async throws -> Operations.UpdateAssets.Output {
         try await updateAssets(Operations.UpdateAssets.Input(body: body))
     }
@@ -732,7 +729,6 @@ extension APIProtocol {
     ///
     /// - Remark: HTTP `PUT /people/{id}`.
     /// - Remark: Generated from `#/paths//people/{id}/put(updatePerson)`.
-    @available(*, deprecated)
     public func updatePerson(
         path: Operations.UpdatePerson.Input.Path,
         headers: Operations.UpdatePerson.Input.Headers = .init(),

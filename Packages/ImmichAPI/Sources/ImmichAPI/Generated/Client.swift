@@ -706,7 +706,6 @@ public struct Client: APIProtocol {
     ///
     /// - Remark: HTTP `PUT /assets`.
     /// - Remark: Generated from `#/paths//assets/put(updateAssets)`.
-    @available(*, deprecated)
     public func updateAssets(_ input: Operations.UpdateAssets.Input) async throws -> Operations.UpdateAssets.Output {
         try await client.send(
             input: input,
@@ -2251,7 +2250,6 @@ public struct Client: APIProtocol {
     ///
     /// - Remark: HTTP `PUT /people/{id}`.
     /// - Remark: Generated from `#/paths//people/{id}/put(updatePerson)`.
-    @available(*, deprecated)
     public func updatePerson(_ input: Operations.UpdatePerson.Input) async throws -> Operations.UpdatePerson.Output {
         try await client.send(
             input: input,
