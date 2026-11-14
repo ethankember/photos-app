@@ -1,0 +1,62 @@
+name: Build IPA
+
+# An unsigned Photos.ipa for sideloading (Sideloadly, AltStore or SideStore sign it with your own
+# Apple account). Runs on every push to the oidc-sign-in branch, from the Actions tab ("Run
+# workflow", once this file is on the default branch), and for v* tags, which also attach the IPA
+# to a GitHub release.
+on:
+  workflow_dispatch:
+  push:
+    branches: [oidc-sign-in]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  ipa:
+    name: Unsigned IPA
+    runs-on: macos-26
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Test the API package
+        run: swift test --package-path Packages/ImmichAPI
+
+      - name: Build (Release, unsigned)
+        run: |
+          xcodegen generate
+          xcodebuild -project Photos.xcodeproj -scheme Photos -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package Photos.ipa
+        run: |
+          APP=build/DerivedData/Build/Products/Release-iphoneos/Photos.app
+          test -f "$APP/Info.plist"
+          rm -rf build/ipa && mkdir -p build/ipa/Payload
+          ditto "$APP" build/ipa/Payload/Photos.app
+          (cd build/ipa && zip -qry ../Photos.ipa Payload)
+          plutil -p "$APP/Info.plist" | grep -E 'CFBundleIdentifier|CFBundleShortVersionString|MinimumOSVersion'
+          ls -lh build/Photos.ipa
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: Photos-ipa
+          path: build/Photos.ipa
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "Unsigned build for sideloading."
+          gh release upload "$GITHUB_REF_NAME" build/Photos.ipa --clobber

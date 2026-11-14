@@ -28,6 +28,27 @@ public struct ImmichProvider: CloudProvider {
         return CloudSignIn(token: result.accessToken, userID: result.userID, email: result.email, name: result.name, isAdmin: result.isAdmin)
     }
 
+    public func signInOptions(at server: URL) async throws -> CloudSignInOptions {
+        let options = try await ImmichOAuth.loginOptions(server: server, session: session)
+        return CloudSignInOptions(password: options.password, singleSignOn: options.oauth, singleSignOnTitle: options.buttonText)
+    }
+
+    public func beginSingleSignOn(at server: URL) async throws -> CloudSingleSignOn {
+        let authorization = try await ImmichOAuth.authorize(server: server, session: session)
+        return CloudSingleSignOn(
+            server: server, authorizationURL: authorization.url, callbackScheme: ImmichOAuth.callbackScheme,
+            state: authorization.state, codeVerifier: authorization.codeVerifier
+        )
+    }
+
+    public func finishSingleSignOn(_ attempt: CloudSingleSignOn, callbackURL: URL) async throws -> CloudSignIn {
+        let result = try await ImmichOAuth.finish(
+            callbackURL: callbackURL, state: attempt.state, codeVerifier: attempt.codeVerifier,
+            server: attempt.server, session: session
+        )
+        return CloudSignIn(token: result.accessToken, userID: result.userID, email: result.email, name: result.name, isAdmin: result.isAdmin)
+    }
+
     public func signOut(at server: URL, token: String) async {
         do {
             try await ImmichClient.make(server: server, session: session) { token }.logoutSession()

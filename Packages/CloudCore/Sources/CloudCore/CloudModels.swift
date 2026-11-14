@@ -175,6 +175,43 @@ public struct CloudSignIn: Sendable, Equatable {
     }
 }
 
+/// The ways a server lets people sign in.
+public struct CloudSignInOptions: Sendable, Equatable {
+    /// Email and password.
+    public let password: Bool
+    /// Single sign-on through the server's identity provider (OAuth / OpenID Connect).
+    public let singleSignOn: Bool
+    /// The server's own label for the single sign-on button, when it sets one.
+    public let singleSignOnTitle: String?
+
+    public init(password: Bool, singleSignOn: Bool, singleSignOnTitle: String?) {
+        self.password = password
+        self.singleSignOn = singleSignOn
+        self.singleSignOnTitle = singleSignOnTitle
+    }
+}
+
+/// A single sign-on in progress: the identity provider's page to show in a browser sheet, and
+/// what's needed to finish once it sends the browser back to `callbackScheme`.
+public struct CloudSingleSignOn: Sendable, Equatable {
+    /// The address the sign-in started on; it finishes there too.
+    public let server: URL
+    public let authorizationURL: URL
+    public let callbackScheme: String
+    /// OAuth `state`: the answer must carry the same value.
+    public let state: String
+    /// The PKCE secret behind the code challenge sent at the start.
+    public let codeVerifier: String
+
+    public init(server: URL, authorizationURL: URL, callbackScheme: String, state: String, codeVerifier: String) {
+        self.server = server
+        self.authorizationURL = authorizationURL
+        self.callbackScheme = callbackScheme
+        self.state = state
+        self.codeVerifier = codeVerifier
+    }
+}
+
 public struct CloudServerInfo: Sendable, Equatable {
     public let version: String
     /// Set when the server's version differs from the one the provider was built for.

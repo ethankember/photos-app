@@ -1,3 +1,4 @@
+import AuthenticationServices
 import Core
 import CloudCore
 import SwiftUI
@@ -10,30 +11,39 @@ struct SignInView: View {
 
     @State private var email = ""
     @State private var password = ""
-    @State private var isWorking = false
+    @State private var working: Method?
     @State private var errorMessage: String?
     @FocusState private var focus: Field?
+    @Environment(\.webAuthenticationSession) private var webAuthenticationSession
 
     private enum Field { case email, password }
+    private enum Method { case password, singleSignOn }
+
+    private var isWorking: Bool { working != nil }
+    /// Until the server has answered, both ways in are offered.
+    private var offersPassword: Bool { model.signInOptions?.password ?? true }
+    private var offersSingleSignOn: Bool { model.signInOptions?.singleSignOn ?? true }
 
     var body: some View {
         Form {
-            Section {
-                TextField("Email", text: $email)
-                    .textContentType(.username)
-                    .keyboardType(.emailAddress)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .focused($focus, equals: .email)
-                    .submitLabel(.next)
-                    .onSubmit { focus = .password }
-                SecureField("Password", text: $password)
-                    .textContentType(.password)
-                    .focused($focus, equals: .password)
-                    .submitLabel(.go)
-                    .onSubmit(signIn)
-            } header: {
-                Text("Cloud account")
+            if offersPassword {
+                Section {
+                    TextField("Email", text: $email)
+                        .textContentType(.username)
+                        .keyboardType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .focused($focus, equals: .email)
+                        .submitLabel(.next)
+                        .onSubmit { focus = .password }
+                    SecureField("Password", text: $password)
+                        .textContentType(.password)
+                        .focused($focus, equals: .password)
+                        .submitLabel(.go)
+                        .onSubmit(signIn)
+                } header: {
+                    Text("Cloud account")
+                }
             }
 
             if let errorMessage {
@@ -44,15 +54,32 @@ struct SignInView: View {
                 }
             }
 
-            Section {
-                Button(action: signIn) {
-                    HStack {
-                        Text("Sign In")
-                        Spacer()
-                        if isWorking { ProgressView() }
+            if offersPassword {
+                Section {
+                    Button(action: signIn) {
+                        HStack {
+                            Text("Sign In")
+                            Spacer()
+                            if working == .password { ProgressView() }
+                        }
                     }
+                    .disabled(isWorking || email.isEmpty || password.isEmpty)
                 }
-                .disabled(isWorking || email.isEmpty || password.isEmpty)
+            }
+
+            if offersSingleSignOn {
+                Section {
+                    Button(action: signInWithSingleSignOn) {
+                        HStack {
+                            Text(model.signInOptions?.singleSignOnTitle ?? "Sign In with Single Sign-On")
+                            Spacer()
+                            if working == .singleSignOn { ProgressView() }
+                        }
+                    }
+                    .disabled(isWorking)
+                } footer: {
+                    Text("Signs in through your server’s identity provider (OAuth / OpenID Connect).")
+                }
             }
 
             ServerAddressSection(model: model)
@@ -61,18 +88,41 @@ struct SignInView: View {
         .onAppear {
             if email.isEmpty { email = initialEmail }
         }
+        // Again whenever another address starts answering (e.g. after editing the server below).
+        .task(id: model.connection.activeServer?.url) {
+            await model.refreshSignInOptions()
+        }
     }
 
     private func signIn() {
         guard !isWorking, !email.isEmpty, !password.isEmpty else { return }
-        isWorking = true
+        working = .password
         errorMessage = nil
         Task {
-            defer { isWorking = false }
+            defer { working = nil }
             do {
                 try await model.signIn(email: email, password: password)
                 password = ""
                 onSignedIn?()
+            } catch {
+                errorMessage = (error as? CloudError)?.message ?? error.localizedDescription
+            }
+        }
+    }
+
+    private func signInWithSingleSignOn() {
+        guard !isWorking else { return }
+        working = .singleSignOn
+        errorMessage = nil
+        Task {
+            defer { working = nil }
+            do {
+                try await model.signInWithSingleSignOn { url, callbackScheme in
+                    try await webAuthenticationSession.authenticate(using: url, callbackURLScheme: callbackScheme)
+                }
+                onSignedIn?()
+            } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
+                // The sheet was closed: nothing to report.
             } catch {
                 errorMessage = (error as? CloudError)?.message ?? error.localizedDescription
             }

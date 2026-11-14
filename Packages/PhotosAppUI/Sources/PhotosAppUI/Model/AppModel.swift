@@ -21,6 +21,8 @@ public final class AppModel {
     public private(set) var versionWarning: String?
     /// Shown instead of the library when opening the account's database fails.
     public private(set) var sessionError: String?
+    /// How the current server lets people sign in (password, single sign-on); nil until it answers.
+    public private(set) var signInOptions: CloudSignInOptions?
 
     /// The Cloud server type (Immich today); everything server-specific goes through it.
     public let provider: any CloudProvider
@@ -277,6 +279,44 @@ public final class AppModel {
 
     /// Signs in against whichever configured address answers first.
     public func signIn(email: String, password: String) async throws {
+        let server = try await reachableServer()
+        let result = try await provider.signIn(at: server.url, email: email.trimmingCharacters(in: .whitespaces), password: password)
+        try completeSignIn(result, via: server)
+    }
+
+    /// Signs in through the server's identity provider (OAuth / OpenID Connect). `authenticate`
+    /// shows the provider's page in a browser sheet and returns the URL it was sent back to.
+    public func signInWithSingleSignOn(
+        authenticate: @MainActor (_ url: URL, _ callbackScheme: String) async throws -> URL
+    ) async throws {
+        let server = try await reachableServer()
+        let attempt = try await provider.beginSingleSignOn(at: server.url)
+        let callbackURL = try await authenticate(attempt.authorizationURL, attempt.callbackScheme)
+        let result = try await provider.finishSingleSignOn(attempt, callbackURL: callbackURL)
+        try completeSignIn(result, via: server)
+    }
+
+    /// Reads how the current server lets people sign in; nil while no server answers.
+    public func refreshSignInOptions() async {
+        guard let server = connection.activeServer else {
+            signInOptions = nil
+            return
+        }
+        let options: CloudSignInOptions?
+        do {
+            options = try await provider.signInOptions(at: server.url)
+        } catch {
+            options = nil
+            if !Task.isCancelled {
+                Log.networking.notice("Sign-in options unavailable: \(CloudError.wrap(error, operation: "Sign-in options").message, privacy: .public)")
+            }
+        }
+        // A newer check (the address changed meanwhile) has the final say.
+        guard !Task.isCancelled, connection.activeServer?.url == server.url else { return }
+        signInOptions = options
+    }
+
+    private func reachableServer() async throws -> ActiveServer {
         let status = await selector.resolve()
         guard let server = status.activeServer else {
             if case .unreachable(let reasons) = status {
@@ -284,7 +324,10 @@ public final class AppModel {
             }
             throw CloudError(kind: .transport, message: "Could not reach the server.")
         }
-        let result = try await provider.signIn(at: server.url, email: email.trimmingCharacters(in: .whitespaces), password: password)
+        return server
+    }
+
+    private func completeSignIn(_ result: CloudSignIn, via server: ActiveServer) throws {
         let account = Account(userID: result.userID, email: result.email, name: result.name, isAdmin: result.isAdmin)
         try accounts.signIn(account, token: result.token)
         Log.networking.info("Signed in as \(result.email, privacy: .private) via \(server.route.rawValue, privacy: .public)")

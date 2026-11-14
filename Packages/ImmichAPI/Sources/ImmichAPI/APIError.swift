@@ -9,12 +9,16 @@ extension CloudError {
     /// Builds an error from an undocumented response, reading Immich's
     /// `{"message": ..., "error": ..., "statusCode": ...}` body when present.
     public static func from(statusCode: Int, payload: UndocumentedPayload, operation: String) async -> CloudError {
-        var serverMessage: String?
-        if let body = payload.body,
-           let data = try? await Data(collecting: body, upTo: 64 * 1024),
-           let decoded = try? JSONDecoder().decode(ServerErrorBody.self, from: data) {
-            serverMessage = decoded.message?.joined
+        var data = Data()
+        if let body = payload.body, let collected = try? await Data(collecting: body, upTo: 64 * 1024) {
+            data = collected
         }
+        return from(statusCode: statusCode, body: data, operation: operation)
+    }
+
+    /// The same, for a response body already read (calls made outside the generated client).
+    public static func from(statusCode: Int, body: Data, operation: String) -> CloudError {
+        let serverMessage = (try? JSONDecoder().decode(ServerErrorBody.self, from: body))?.message?.joined
         let detail = serverMessage.map { ": \($0)" } ?? ""
         switch statusCode {
         case 401:

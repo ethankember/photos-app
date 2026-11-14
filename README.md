@@ -100,6 +100,7 @@ Photos and personal details are blurred.
 - **Keep Offline:** the full-quality originals of your favourites and chosen albums stay on the iPhone.
 
 **Account and settings**
+- Sign in with email and password, or with the server's single sign-on (OAuth / OpenID Connect, e.g. Authentik). It uses the official app's redirect, `app.immich:///oauth-callback`, so an identity provider already set up for Immich's mobile app needs no changes.
 - An account card with the picture taken from your contact card or a photo.
 - Cloud Server Settings: server addresses, accounts, sync, offline and storage, Hidden PIN, and troubleshooting with a log viewer.
 
@@ -181,7 +182,7 @@ A free developer account (Personal Team) works. Free profiles last 7 days, so ru
 ## Usage
 
 **First launch**
-1. Sign in with your server account.
+1. Sign in with your server account, or with **Sign In with Single Sign-On** when the server uses OAuth. Enter the server with `https://` if it is reached by a public name.
 2. Allow **Full** Photos access, so the iPhone's photos join the Library.
 
 **Back up**

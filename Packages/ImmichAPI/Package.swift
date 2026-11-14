@@ -26,7 +26,7 @@ let package = Package(
                 .product(name: "HTTPTypes", package: "swift-http-types"),
             ]
         ),
-        .testTarget(name: "ImmichAPITests", dependencies: ["ImmichAPI", "Core"]),
+        .testTarget(name: "ImmichAPITests", dependencies: ["ImmichAPI", "Core", "CloudCore"]),
     ],
     swiftLanguageModes: [.v6]
 )

@@ -12,6 +12,12 @@ public protocol CloudProvider: Sendable {
 
     func serverInfo(at server: URL) async throws -> CloudServerInfo
     func signIn(at server: URL, email: String, password: String) async throws -> CloudSignIn
+    /// How this server lets people sign in (password, single sign-on, or both).
+    func signInOptions(at server: URL) async throws -> CloudSignInOptions
+    /// Starts single sign-on (OAuth / OpenID Connect): returns the identity provider's page to open.
+    func beginSingleSignOn(at server: URL) async throws -> CloudSingleSignOn
+    /// Finishes single sign-on with the URL the identity provider sent the browser back to.
+    func finishSingleSignOn(_ attempt: CloudSingleSignOn, callbackURL: URL) async throws -> CloudSignIn
     /// Ends the server session for this token; failures are logged, not thrown.
     func signOut(at server: URL, token: String) async
     /// Everything the app does with one signed-in account on the active server.
