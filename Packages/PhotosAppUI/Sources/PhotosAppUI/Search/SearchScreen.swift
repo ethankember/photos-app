@@ -11,7 +11,6 @@ import SwiftUI
 struct SearchScreen: View {
     let session: LibrarySession
     @Bindable var ui: LibraryUIState
-    @Environment(\.dismiss) private var dismiss
     @State private var text = ""
     @State private var results: [TimelineItem] = []
     /// Matches by meaning from the server, after the local ones.
@@ -312,13 +311,14 @@ struct SearchScreen: View {
                 .padding(.horizontal, 16)
                 .frame(height: 50)
                 .glassSurface(Capsule())
-                Button {
-                    dismiss()
-                } label: {
+                Button(action: close) {
                     Image(systemName: "xmark")
                         .font(.system(size: 19, weight: .medium))
                         .foregroundStyle(.primary)
                         .frame(width: 50, height: 50)
+                        // Without this the button's own frame is just the ✕ glyph (15 pt):
+                        // the whole glass circle is the tap target.
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .glassSurface(Circle())
@@ -327,6 +327,12 @@ struct SearchScreen: View {
         }
         .padding(.horizontal, 8)
         .padding(.bottom, 8)
+    }
+
+    /// Puts the keyboard away and closes Search through the state that opened it.
+    private func close() {
+        fieldFocused = false
+        ui.showsSearch = false
     }
 }
 
