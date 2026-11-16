@@ -34,7 +34,7 @@ extension MetadataQuery {
         dto.takenBefore = takenBefore
         dto.isFavorite = isFavorite
         dto._type = isVideo.map { $0 ? .video : .image }
-        dto.visibility = visibility.map(Components.Schemas.AssetVisibility.init)
+        dto.visibility = visibility.flatMap { Components.Schemas.AssetVisibility(rawValue: $0.rawValue) }
         if !personIDs.isEmpty { dto.personIds = personIDs }
         if trashedOnly {
             dto.withDeleted = true
@@ -60,21 +60,11 @@ extension MetadataQuery {
         dto.takenBefore = takenBefore
         dto.isFavorite = isFavorite
         dto._type = isVideo.map { $0 ? .video : .image }
-        dto.visibility = visibility.map(Components.Schemas.AssetVisibility.init)
+        dto.visibility = visibility.flatMap { Components.Schemas.AssetVisibility(rawValue: $0.rawValue) }
         if !personIDs.isEmpty { dto.personIds = personIDs }
         dto.page = page
         dto.size = size
         return dto
-    }
-}
-
-extension Components.Schemas.AssetVisibility {
-    init(_ visibility: CloudVisibility) {
-        switch visibility {
-        case .timeline: self = .timeline
-        case .archive: self = .archive
-        case .locked: self = .locked
-        }
     }
 }
 

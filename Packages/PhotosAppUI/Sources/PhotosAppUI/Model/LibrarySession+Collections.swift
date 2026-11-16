@@ -232,6 +232,7 @@ extension RemoteVisibility {
         switch visibility {
         case .timeline: self = .timeline
         case .archive: self = .archive
+        case .hidden: self = .hidden
         case .locked: self = .locked
         }
     }

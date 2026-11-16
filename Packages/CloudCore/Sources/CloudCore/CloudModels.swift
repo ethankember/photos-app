@@ -119,15 +119,6 @@ public struct CloudSearchQuery: Sendable, Hashable {
     public init() {}
 }
 
-/// Where an item lives in the library.
-public enum CloudVisibility: String, Sendable, Hashable, CaseIterable {
-    /// The Library.
-    case timeline
-    case archive
-    /// The Hidden album (Immich's Locked Folder; the server needs its PIN first).
-    case locked
-}
-
 /// Someone recognised in photos by the server's face recognition (machine learning).
 public struct CloudPerson: Sendable, Hashable, Identifiable {
     public let id: String
