@@ -41,7 +41,12 @@ jobs:
       - name: Test the packages
         run: |
           swift test --package-path Packages/ImmichAPI
-          swift test --package-path Packages/Persistence
+          # The "…Quickly" tests time against Apple silicon; Intel runners are slower.
+          if [ "$(uname -m)" = "x86_64" ]; then
+            swift test --package-path Packages/Persistence --skip Quickly
+          else
+            swift test --package-path Packages/Persistence
+          fi
           # The app build doesn't compile test targets: catch a changed protocol their fakes implement.
           swift build --build-tests --package-path Packages/Backup
 
