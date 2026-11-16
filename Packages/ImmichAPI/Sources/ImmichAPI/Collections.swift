@@ -18,6 +18,66 @@ extension CloudAsset {
     }
 }
 
+extension MetadataQuery {
+    /// One page of `POST /search/metadata`, newest first.
+    func metadataSearchDto(page: Int, size: Int) -> Components.Schemas.MetadataSearchDto {
+        var dto = Components.Schemas.MetadataSearchDto()
+        dto.albumIds = albumID.map { [$0] }
+        dto.city = city
+        dto.country = country
+        dto.originalFileName = fileName
+        dto.description = description
+        dto.ocr = text
+        dto.make = make
+        dto.model = model
+        dto.takenAfter = takenAfter
+        dto.takenBefore = takenBefore
+        dto.isFavorite = isFavorite
+        dto._type = isVideo.map { $0 ? .video : .image }
+        dto.visibility = visibility.map(Components.Schemas.AssetVisibility.init)
+        if !personIDs.isEmpty { dto.personIds = personIDs }
+        if trashedOnly {
+            dto.withDeleted = true
+            dto.trashedAfter = Date(timeIntervalSince1970: 0)
+        }
+        dto.order = .desc
+        dto.page = page
+        dto.size = size
+        return dto
+    }
+
+    /// One page of `POST /search/smart` for `query`, with the same filters.
+    func smartSearchDto(query: String, page: Int, size: Int) -> Components.Schemas.SmartSearchDto {
+        var dto = Components.Schemas.SmartSearchDto()
+        dto.query = query
+        dto.albumIds = albumID.map { [$0] }
+        dto.city = city
+        dto.country = country
+        dto.ocr = text
+        dto.make = make
+        dto.model = model
+        dto.takenAfter = takenAfter
+        dto.takenBefore = takenBefore
+        dto.isFavorite = isFavorite
+        dto._type = isVideo.map { $0 ? .video : .image }
+        dto.visibility = visibility.map(Components.Schemas.AssetVisibility.init)
+        if !personIDs.isEmpty { dto.personIds = personIDs }
+        dto.page = page
+        dto.size = size
+        return dto
+    }
+}
+
+extension Components.Schemas.AssetVisibility {
+    init(_ visibility: CloudVisibility) {
+        switch visibility {
+        case .timeline: self = .timeline
+        case .archive: self = .archive
+        case .locked: self = .locked
+        }
+    }
+}
+
 extension Client {
     /// Metadata search, newest first, following pages up to `limit` results.
     /// Small pages keep each request light on the Raspberry Pi.
@@ -27,26 +87,7 @@ extension Client {
         let pageSize = 250
         do {
             while results.count < limit {
-                var dto = Components.Schemas.MetadataSearchDto()
-                dto.albumIds = query.albumID.map { [$0] }
-                dto.city = query.city
-                dto.country = query.country
-                dto.originalFileName = query.fileName
-                dto.description = query.description
-                dto.make = query.make
-                dto.model = query.model
-                dto.takenAfter = query.takenAfter
-                dto.takenBefore = query.takenBefore
-                dto.isFavorite = query.isFavorite
-                dto._type = query.isVideo.map { $0 ? .video : .image }
-                if !query.personIDs.isEmpty { dto.personIds = query.personIDs }
-                if query.trashedOnly {
-                    dto.withDeleted = true
-                    dto.trashedAfter = Date(timeIntervalSince1970: 0)
-                }
-                dto.order = .desc
-                dto.page = page
-                dto.size = pageSize
+                let dto = query.metadataSearchDto(page: page, size: pageSize)
                 switch try await searchAssets(body: .json(dto)) {
                 case .ok(let response):
                     let assets = try response.body.json.assets

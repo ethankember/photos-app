@@ -51,7 +51,9 @@ struct ImmichConnection: CloudConnection {
     func personThumbnailRequest(personID: String) -> URLRequest {
         MediaEndpoints.request(MediaEndpoints.personThumbnail(server: server.url, personID: personID), token: token)
     }
-    func smartSearch(_ text: String, limit: Int) async throws -> [CloudAsset] { try await client.smartSearch(text, limit: limit) }
+    func smartSearch(_ text: String, filters: CloudSearchQuery, limit: Int) async throws -> [CloudAsset] {
+        try await client.smartSearch(text, filters: filters, limit: limit)
+    }
     func trashRetentionDays() async throws -> Int { try await client.trashRetentionDays() }
 
     // MARK: Library sync

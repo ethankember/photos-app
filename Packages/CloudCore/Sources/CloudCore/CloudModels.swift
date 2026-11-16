@@ -110,8 +110,22 @@ public struct CloudSearchQuery: Sendable, Hashable {
     public var trashedOnly = false
     /// Photos with all of these people in them (face recognition).
     public var personIDs: [String] = []
+    /// Only items with this visibility. Unset leaves it to the server, which includes Hidden
+    /// (Locked Folder) items while its session is unlocked: searches shown to the user set it.
+    public var visibility: CloudVisibility?
+    /// Text recognised in the photo (the server's OCR).
+    public var text: String?
 
     public init() {}
+}
+
+/// Where an item lives in the library.
+public enum CloudVisibility: String, Sendable, Hashable, CaseIterable {
+    /// The Library.
+    case timeline
+    case archive
+    /// The Hidden album (Immich's Locked Folder; the server needs its PIN first).
+    case locked
 }
 
 /// Someone recognised in photos by the server's face recognition (machine learning).

@@ -26,8 +26,12 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Test the API package
-        run: swift test --package-path Packages/ImmichAPI
+      - name: Test the packages
+        run: |
+          swift test --package-path Packages/ImmichAPI
+          swift test --package-path Packages/Persistence
+          # The app build doesn't compile test targets: catch a changed protocol their fakes implement.
+          swift build --build-tests --package-path Packages/Backup
 
       - name: Build (Release, unsigned)
         run: |

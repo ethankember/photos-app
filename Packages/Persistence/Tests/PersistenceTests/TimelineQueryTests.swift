@@ -60,6 +60,35 @@ private func asset(_ index: Int, owner: String = "me", visibility: RemoteVisibil
         #expect(Set(places) == ["Lisbon", "Porto"])
     }
 
+    @Test func searchStaysInOneVisibility() throws {
+        let database = try AppDatabase.inMemory()
+        try database.writer.write { db in
+            try RemoteStore.upsert([asset(1), asset(4, visibility: .archive), asset(5, visibility: .locked), asset(6, visibility: .archive, deleted: true)], in: db)
+            try db.execute(sql: "INSERT INTO remoteExif (assetId, city) VALUES ('asset-000001', 'Lisbon'), ('asset-000004', 'Lisbon'), ('asset-000005', 'Lisbon'), ('asset-000006', 'Lisbon')")
+        }
+        let ids = { (visibility: RemoteVisibility) in
+            try database.reader.read { db in try LibrarySearch.assetIDs(ownerID: "me", text: "lisbon", visibility: visibility, in: db) }
+        }
+        #expect(try ids(.timeline) == ["asset-000001"])
+        #expect(try ids(.archive) == ["asset-000004"])
+        #expect(try ids(.locked) == ["asset-000005"])
+    }
+
+    @Test func fileNameSearchIgnoresOtherFields() throws {
+        let database = try AppDatabase.inMemory()
+        try database.writer.write { db in
+            try RemoteStore.upsert([asset(1), asset(12), asset(2)], in: db)
+            try db.execute(sql: "INSERT INTO remoteExif (assetId, city, make) VALUES ('asset-000002', 'img_1 street', 'Canon')")
+        }
+        let ids = { (text: String, fileNameOnly: Bool) in
+            try database.reader.read { db in try LibrarySearch.assetIDs(ownerID: "me", text: text, fileNameOnly: fileNameOnly, in: db) }
+        }
+        #expect(try ids("img_1", true) == ["asset-000012", "asset-000001"])
+        #expect(try ids("img_1", false) == ["asset-000012", "asset-000002", "asset-000001"])
+        #expect(try ids("canon", true).isEmpty)
+        #expect(try ids("heic", true).count == 3)
+    }
+
     @Test func upsertUpdatesInPlace() throws {
         let database = try AppDatabase.inMemory()
         var record = asset(1)

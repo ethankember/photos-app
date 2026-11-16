@@ -4,13 +4,19 @@ import GRDB
 /// Search over the synced metadata (place, caption, file name, camera), so Search
 /// works offline and costs the server nothing. Every word must match somewhere.
 public enum LibrarySearch {
-    /// IDs of the owner's visible photos matching all words, newest first.
-    public static func assetIDs(ownerID: String, text: String, in db: Database) throws -> [String] {
+    /// IDs of the owner's photos with this visibility (the Library by default) matching all
+    /// words, newest first: across places, captions, file names and cameras, or only the
+    /// file name with `fileNameOnly`.
+    public static func assetIDs(
+        ownerID: String, text: String, visibility: RemoteVisibility = .timeline, fileNameOnly: Bool = false, in db: Database
+    ) throws -> [String] {
         let words = text.split(whereSeparator: \.isWhitespace).map { String($0) }.filter { !$0.isEmpty }
         guard !words.isEmpty else { return [] }
-        let fields = "(COALESCE(e.city,'') || ' ' || COALESCE(e.state,'') || ' ' || COALESCE(e.country,'') || ' ' || COALESCE(e.description,'') || ' ' || a.originalFileName || ' ' || COALESCE(e.make,'') || ' ' || COALESCE(e.model,'') || ' ' || COALESCE(e.lensModel,''))"
+        let fields = fileNameOnly
+            ? "a.originalFileName"
+            : "(COALESCE(e.city,'') || ' ' || COALESCE(e.state,'') || ' ' || COALESCE(e.country,'') || ' ' || COALESCE(e.description,'') || ' ' || a.originalFileName || ' ' || COALESCE(e.make,'') || ' ' || COALESCE(e.model,'') || ' ' || COALESCE(e.lensModel,''))"
         let conditions = Array(repeating: "\(fields) LIKE ? ESCAPE '\\'", count: words.count).joined(separator: " AND ")
-        var arguments: StatementArguments = [ownerID, RemoteVisibility.timeline.rawValue]
+        var arguments: StatementArguments = [ownerID, visibility.rawValue]
         for word in words {
             let escaped = word.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "%", with: "\\%").replacingOccurrences(of: "_", with: "\\_")
             arguments += ["%\(escaped)%"]

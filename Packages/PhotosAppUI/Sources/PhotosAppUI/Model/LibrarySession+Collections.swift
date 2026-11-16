@@ -51,9 +51,22 @@ extension LibrarySession {
         return try await connected().search(query, limit: 5000).map(TimelineItem.init).reversed()
     }
 
-    /// Photos matching a description, best matches first.
-    func smartSearch(_ text: String) async throws -> [TimelineItem] {
-        try await connected().smartSearch(text, limit: 300).map(TimelineItem.init)
+    /// Photos matching a description, best matches first, narrowed by `filters`.
+    func smartSearch(_ text: String, filters: CloudSearchQuery) async throws -> [TimelineItem] {
+        try requireSearchable(filters.visibility)
+        return try await connected().smartSearch(text, filters: filters, limit: 300).map(TimelineItem.init)
+    }
+
+    /// The server's metadata search (file names, text in photos, albums), newest first.
+    func serverSearch(_ query: CloudSearchQuery, limit: Int = 1000) async throws -> [TimelineItem] {
+        try requireSearchable(query.visibility)
+        return try await connected().search(query, limit: limit).map(TimelineItem.init)
+    }
+
+    /// Search can only look in the Hidden album while it's unlocked; every search goes through here.
+    func requireSearchable(_ visibility: CloudVisibility?) throws {
+        guard visibility == .locked, hiddenVault.state != .unlocked else { return }
+        throw CloudError(kind: .unauthorized, message: String(localized: "Unlock the Hidden album to search it."))
     }
 
     /// A person's face picture, cached on disk for a day (it changes when the face is changed on the server).
@@ -120,12 +133,27 @@ extension LibrarySession {
         syncNow()
     }
 
-    /// Local search over places, captions, file names and cameras; newest first.
-    func search(_ text: String) async -> [TimelineItem] {
+    /// Local search over places, captions, file names and cameras (or file names only), in the
+    /// Library, Archive or Hidden album; newest first.
+    func search(_ text: String, in visibility: CloudVisibility = .timeline, fileNameOnly: Bool = false) async throws -> [TimelineItem] {
+        try requireSearchable(visibility)
         let ownerID = account.userID
-        let ids = (try? await database.reader.read { db in try LibrarySearch.assetIDs(ownerID: ownerID, text: text, in: db) }) ?? []
-        let byID = Dictionary(timeline.items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let stored = RemoteVisibility(visibility)
+        let ids = (try? await database.reader.read { db in
+            try LibrarySearch.assetIDs(ownerID: ownerID, text: text, visibility: stored, fileNameOnly: fileNameOnly, in: db)
+        }) ?? []
+        let scopeItems = try await items(in: visibility)
+        let byID = Dictionary(scopeItems.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return ids.compactMap { byID[$0] }
+    }
+
+    /// Everything in the Library, Archive or Hidden album on this phone, oldest first like the grids.
+    func items(in visibility: CloudVisibility) async throws -> [TimelineItem] {
+        try requireSearchable(visibility)
+        if visibility == .timeline { return timeline.items }
+        let ownerID = account.userID
+        let stored = RemoteVisibility(visibility)
+        return (try? await database.reader.read { db in try TimelineQuery.remote(ownerID: ownerID, visibility: stored, in: db) }) ?? []
     }
 
     func topPlaces(limit: Int) async -> [String] {
@@ -196,5 +224,15 @@ extension LibrarySession {
     func locations(limit: Int = 5000) async -> [AssetLocation] {
         let ownerID = account.userID
         return (try? await database.reader.read { db in try LibrarySearch.locations(ownerID: ownerID, limit: limit, in: db) }) ?? []
+    }
+}
+
+extension RemoteVisibility {
+    init(_ visibility: CloudVisibility) {
+        switch visibility {
+        case .timeline: self = .timeline
+        case .archive: self = .archive
+        case .locked: self = .locked
+        }
     }
 }

@@ -121,7 +121,7 @@ private final class FakeConnection: CloudConnection, @unchecked Sendable {
     func people(inAsset assetID: String) async throws -> [CloudPerson] { throw unused() }
     func updatePerson(id: String, name: String?, birthDate: String?) async throws -> CloudPerson { throw unused() }
     func personThumbnailRequest(personID: String) -> URLRequest { URLRequest(url: URL(string: "x:")!) }
-    func smartSearch(_ text: String, limit: Int) async throws -> [CloudAsset] { throw unused() }
+    func smartSearch(_ text: String, filters: CloudSearchQuery, limit: Int) async throws -> [CloudAsset] { throw unused() }
     func trashRetentionDays() async throws -> Int { throw unused() }
 }
 

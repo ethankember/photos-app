@@ -115,8 +115,8 @@ public protocol CloudConnection: Sendable {
     func updatePerson(id: String, name: String?, birthDate: String?) async throws -> CloudPerson
     /// The person's face picture.
     func personThumbnailRequest(personID: String) -> URLRequest
-    /// Search by meaning ("dog on a beach"), newest first.
-    func smartSearch(_ text: String, limit: Int) async throws -> [CloudAsset]
+    /// Search by meaning ("dog on a beach"), best matches first, narrowed by `filters` (album, visibility, photos or videos, favourites, people).
+    func smartSearch(_ text: String, filters: CloudSearchQuery, limit: Int) async throws -> [CloudAsset]
     /// How many days deleted items stay in Recently Deleted.
     func trashRetentionDays() async throws -> Int
 }

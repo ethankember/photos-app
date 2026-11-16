@@ -54,19 +54,51 @@ enum SearchEngine {
         return query
     }
 
-    /// Matching Library items, newest first.
+    /// Matching Library items, newest first (Recents' cards).
     @MainActor
     static func search(_ text: String, in session: LibrarySession) async -> [TimelineItem] {
-        let query = parse(text)
+        (try? await search(text, filters: SearchFilters(), albumItems: nil, in: session)) ?? []
+    }
+
+    /// Matches on this phone, newest first, within `filters`. `albumItems`: the chosen album's
+    /// items (from the server, newest first) when an album is chosen. Text in photos is only on
+    /// the server, so that search has no matches here. Throws for Hidden while it's locked.
+    @MainActor
+    static func search(_ text: String, filters: SearchFilters, albumItems: [TimelineItem]?, in session: LibrarySession) async throws -> [TimelineItem] {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        let query: Query
         var candidates: [TimelineItem]
-        if query.words.isEmpty {
-            guard query.hasStructure else { return [] }
-            candidates = session.timeline.items.reversed()
-        } else {
-            candidates = await session.search(query.words.joined(separator: " "))
+        switch filters.field {
+        case .text:
+            try session.requireSearchable(filters.visibility)
+            return []
+        case .fileName:
+            // As typed: a file name like "IMG_2024" isn't a year.
+            guard !trimmed.isEmpty else { return [] }
+            query = Query()
+            candidates = try await session.search(trimmed, in: filters.visibility, fileNameOnly: true)
+        case .anything:
+            query = parse(trimmed)
+            if query.words.isEmpty {
+                guard query.hasStructure || filters.listsWithoutText else {
+                    try session.requireSearchable(filters.visibility)
+                    return []
+                }
+                if let albumItems {
+                    candidates = albumItems
+                } else {
+                    candidates = try await session.items(in: filters.visibility).reversed()
+                }
+            } else {
+                candidates = try await session.search(query.words.joined(separator: " "), in: filters.visibility)
+            }
         }
+        let inAlbum = albumItems.map { Set($0.map(\.id)) }
         let calendar = Formatting.wallClock
         return candidates.filter { item in
+            if let inAlbum, !inAlbum.contains(item.id) { return false }
+            if filters.media == .videos && !item.isVideo { return false }
+            if filters.media == .photos && item.isVideo { return false }
             if query.videos && !item.isVideo { return false }
             if query.photos && item.isVideo { return false }
             if query.favourites && !item.isFavorite { return false }

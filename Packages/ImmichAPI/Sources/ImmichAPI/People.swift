@@ -63,16 +63,13 @@ extension Client {
         }
     }
 
-    /// Search by meaning, in pages of 100 up to `limit`.
-    public func smartSearch(_ text: String, limit: Int) async throws -> [CloudAsset] {
+    /// Search by meaning, narrowed by `filters`, in pages of 100 up to `limit`.
+    public func smartSearch(_ text: String, filters: CloudSearchQuery = CloudSearchQuery(), limit: Int) async throws -> [CloudAsset] {
         var results: [CloudAsset] = []
         var page = 1
         do {
             while results.count < limit {
-                var dto = Components.Schemas.SmartSearchDto()
-                dto.query = text
-                dto.page = page
-                dto.size = 100
+                let dto = filters.smartSearchDto(query: text, page: page, size: 100)
                 switch try await searchSmart(body: .json(dto)) {
                 case .ok(let response):
                     let assets = try response.body.json.assets
