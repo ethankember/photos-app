@@ -61,8 +61,10 @@ struct SearchScreen: View {
 
     private var trimmedText: String { text.trimmingCharacters(in: .whitespaces) }
 
-    /// Results, rather than Home: something typed, or a filter that lists on its own.
-    private var showsResults: Bool { !trimmedText.isEmpty || filters.listsWithoutText }
+    /// Results, rather than Home: something typed, or a filter that lists on its own. Always in
+    /// Hidden: Home's People and Recents lead to screens that would show Hidden items while it's
+    /// unlocked.
+    private var showsResults: Bool { !trimmedText.isEmpty || filters.listsWithoutText || filters.scope == .hidden }
 
     /// Local matches first, then the server's not already among them.
     private var combinedResults: [TimelineItem] {
@@ -70,8 +72,10 @@ struct SearchScreen: View {
         return results + serverResults.filter { !ids.contains($0.id) }
     }
 
+    /// Not in Hidden: a person's page lists their photos from the server, Hidden ones included
+    /// while the Hidden album is unlocked.
     private var matchingPeople: [CloudPerson] {
-        guard filters.field == .anything else { return [] }
+        guard filters.field == .anything, filters.scope != .hidden else { return [] }
         let query = trimmedText.lowercased()
         guard query.count >= 2 else { return [] }
         return people.filter { !$0.name.isEmpty && $0.name.lowercased().contains(query) }
@@ -170,12 +174,16 @@ struct SearchScreen: View {
             }
         }
         guard !Task.isCancelled else { return }
+        let found: [TimelineItem]
         do {
-            results = try await SearchEngine.search(trimmed, filters: filters, albumItems: albumItems, in: session)
+            found = try await SearchEngine.search(trimmed, filters: filters, albumItems: albumItems, in: session)
         } catch {
-            results = []
+            found = []
             message = Self.message(for: error)
         }
+        // A newer search (or Hidden locking) has the final say.
+        guard !Task.isCancelled else { return }
+        results = found
         serverResults = []
         serverMessage = message
         searchedKey = key
