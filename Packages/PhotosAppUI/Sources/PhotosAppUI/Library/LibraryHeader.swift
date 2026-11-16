@@ -97,6 +97,7 @@ struct LibraryHeader: View {
                         Image(systemName: "xmark")
                             .font(.system(size: 19, weight: .medium))
                             .frame(width: 48, height: 48)
+                            .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
                     .glassSurface(Circle(), style: .dark)
@@ -112,6 +113,7 @@ struct LibraryHeader: View {
                             .font(.system(size: 17, weight: .semibold))
                             .padding(.horizontal, 20)
                             .frame(height: 48)
+                            .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
                     .glassSurface(Capsule(), style: .dark)

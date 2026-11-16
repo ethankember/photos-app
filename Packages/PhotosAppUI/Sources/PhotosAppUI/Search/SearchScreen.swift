@@ -206,6 +206,7 @@ struct SearchScreen: View {
                             .foregroundStyle(.primary)
                             .padding(.horizontal, 22)
                             .frame(height: 44)
+                            .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
                     .glassSurface(Capsule())

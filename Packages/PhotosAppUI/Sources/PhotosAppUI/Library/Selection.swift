@@ -129,6 +129,7 @@ struct SelectionFooter: View {
                 Image(systemName: "square.and.arrow.up")
                     .font(.system(size: 20, weight: .medium))
                     .frame(width: 54, height: 54)
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
             .glassSurface(Circle())
@@ -142,6 +143,7 @@ struct SelectionFooter: View {
                     .font(.system(size: 17, weight: .semibold))
                     .padding(.horizontal, 26)
                     .frame(height: 54)
+                    .contentShape(Capsule())
             }
             .buttonStyle(.plain)
             .glassSurface(Capsule())
@@ -153,6 +155,7 @@ struct SelectionFooter: View {
                 Image(systemName: "trash")
                     .font(.system(size: 20, weight: .medium))
                     .frame(width: 54, height: 54)
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
             .glassSurface(Circle())

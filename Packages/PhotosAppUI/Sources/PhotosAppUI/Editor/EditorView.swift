@@ -142,6 +142,7 @@ struct EditorView: View {
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(.primary)
                 .frame(width: 42, height: 42)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .glassSurface(Circle())

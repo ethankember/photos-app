@@ -29,6 +29,7 @@ struct FloatingBar: View {
                             .font(.system(size: 21, weight: .medium))
                             .foregroundStyle(.tint)
                             .frame(width: 54, height: 54)
+                            .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
                     .glassSurface(Circle())
@@ -139,6 +140,8 @@ struct FloatingBar: View {
                 .font(.system(size: size > 60 ? 24 : 21, weight: .medium))
                 .foregroundStyle(.primary)
                 .frame(width: size, height: size)
+                // A plain button's own frame is just its glyph: the whole glass circle is the tap target.
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .glassSurface(Circle())
