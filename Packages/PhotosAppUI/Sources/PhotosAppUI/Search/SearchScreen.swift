@@ -461,7 +461,8 @@ struct SearchScreen: View {
             } else {
                 PhotoGridView(
                     snapshot: TimelineSnapshot(items: results, version: (searchedKey?.hashValue ?? 0) &+ serverResults.count, isLoaded: true),
-                    session: session, columns: $columns,
+                    // Hidden results open like the Hidden album's (Unhide rather than Hide).
+                    session: session, mode: searchedKey?.filters.scope == .hidden ? .hidden : .library, columns: $columns,
                     insets: UIEdgeInsets(top: 0, left: 0, bottom: barHeight + 32, right: 0)
                 )
                 .ignoresSafeArea(edges: .bottom)
