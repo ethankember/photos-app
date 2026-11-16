@@ -60,6 +60,8 @@ public final class LibrarySession {
     public internal(set) var backupStatus = BackupStatus()
     /// Bumped when the account picture changes, so views showing it reload.
     public internal(set) var profileImageVersion = 0
+    /// Goes up when people change on the server from here (a merge): lists of people load again.
+    public internal(set) var peopleVersion = 0
     public internal(set) var backupSettings = BackupSettings.load() {
         didSet { backupSettings.save(); runBackup() }
     }

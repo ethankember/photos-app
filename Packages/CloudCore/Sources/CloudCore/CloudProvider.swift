@@ -115,6 +115,15 @@ public protocol CloudConnection: Sendable {
     func updatePerson(id: String, name: String?, birthDate: String?) async throws -> CloudPerson
     /// The person's face picture.
     func personThumbnailRequest(personID: String) -> URLRequest
+    /// One person as the server has them now (after a rename or a merge).
+    func person(id: String) async throws -> CloudPerson
+    /// Merges the people into the first: their faces move to it, and it keeps its name and
+    /// birthday (taking the others' when it has none). Returns the IDs that weren't merged.
+    func mergePeople(_ ids: [String]) async throws -> [String]
+    /// The faces in a photo, with whom each one is.
+    func faces(inAsset assetID: String) async throws -> [CloudFace]
+    /// Takes a face out of its photo, so the photo no longer counts as that person's.
+    func removeFace(id: String) async throws
     /// Search by meaning ("dog on a beach"), best matches first, narrowed by `filters` (album, visibility, photos or videos, favourites, people).
     func smartSearch(_ text: String, filters: CloudSearchQuery, limit: Int) async throws -> [CloudAsset]
     /// How many days deleted items stay in Recently Deleted.

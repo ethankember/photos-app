@@ -429,6 +429,122 @@ extension Components {
                 case reason
             }
         }
+        /// - Remark: Generated from `#/components/schemas/AssetFaceDeleteDto`.
+        public struct AssetFaceDeleteDto: Codable, Hashable, Sendable {
+            /// Force delete even if person has other faces
+            ///
+            /// - Remark: Generated from `#/components/schemas/AssetFaceDeleteDto/force`.
+            public var force: Swift.Bool
+            /// Creates a new `AssetFaceDeleteDto`.
+            ///
+            /// - Parameters:
+            ///   - force: Force delete even if person has other faces
+            public init(force: Swift.Bool) {
+                self.force = force
+            }
+            public enum CodingKeys: String, CodingKey {
+                case force
+            }
+        }
+        /// Asset face with person
+        ///
+        /// - Remark: Generated from `#/components/schemas/AssetFaceResponseDto`.
+        public struct AssetFaceResponseDto: Codable, Hashable, Sendable {
+            /// Bounding box X1 coordinate
+            ///
+            /// - Remark: Generated from `#/components/schemas/AssetFaceResponseDto/boundingBoxX1`.
+            public var boundingBoxX1: Swift.Int
+            /// Bounding box X2 coordinate
+            ///
+            /// - Remark: Generated from `#/components/schemas/AssetFaceResponseDto/boundingBoxX2`.
+            public var boundingBoxX2: Swift.Int
+            /// Bounding box Y1 coordinate
+            ///
+            /// - Remark: Generated from `#/components/schemas/AssetFaceResponseDto/boundingBoxY1`.
+            public var boundingBoxY1: Swift.Int
+            /// Bounding box Y2 coordinate
+            ///
+            /// - Remark: Generated from `#/components/schemas/AssetFaceResponseDto/boundingBoxY2`.
+            public var boundingBoxY2: Swift.Int
+            /// Face ID
+            ///
+            /// - Remark: Generated from `#/components/schemas/AssetFaceResponseDto/id`.
+            public var id: Swift.String
+            /// Image height in pixels
+            ///
+            /// - Remark: Generated from `#/components/schemas/AssetFaceResponseDto/imageHeight`.
+            public var imageHeight: Swift.Int
+            /// Image width in pixels
+            ///
+            /// - Remark: Generated from `#/components/schemas/AssetFaceResponseDto/imageWidth`.
+            public var imageWidth: Swift.Int
+            /// - Remark: Generated from `#/components/schemas/AssetFaceResponseDto/person`.
+            public struct PersonPayload: Codable, Hashable, Sendable {
+                /// - Remark: Generated from `#/components/schemas/AssetFaceResponseDto/person/value1`.
+                public var value1: Components.Schemas.PersonResponseDto
+                /// Creates a new `PersonPayload`.
+                ///
+                /// - Parameters:
+                ///   - value1:
+                public init(value1: Components.Schemas.PersonResponseDto) {
+                    self.value1 = value1
+                }
+                public init(from decoder: any Swift.Decoder) throws {
+                    self.value1 = try .init(from: decoder)
+                }
+                public func encode(to encoder: any Swift.Encoder) throws {
+                    try self.value1.encode(to: encoder)
+                }
+            }
+            /// - Remark: Generated from `#/components/schemas/AssetFaceResponseDto/person`.
+            public var person: Components.Schemas.AssetFaceResponseDto.PersonPayload?
+            /// - Remark: Generated from `#/components/schemas/AssetFaceResponseDto/sourceType`.
+            public var sourceType: Components.Schemas.SourceType?
+            /// Creates a new `AssetFaceResponseDto`.
+            ///
+            /// - Parameters:
+            ///   - boundingBoxX1: Bounding box X1 coordinate
+            ///   - boundingBoxX2: Bounding box X2 coordinate
+            ///   - boundingBoxY1: Bounding box Y1 coordinate
+            ///   - boundingBoxY2: Bounding box Y2 coordinate
+            ///   - id: Face ID
+            ///   - imageHeight: Image height in pixels
+            ///   - imageWidth: Image width in pixels
+            ///   - person:
+            ///   - sourceType:
+            public init(
+                boundingBoxX1: Swift.Int,
+                boundingBoxX2: Swift.Int,
+                boundingBoxY1: Swift.Int,
+                boundingBoxY2: Swift.Int,
+                id: Swift.String,
+                imageHeight: Swift.Int,
+                imageWidth: Swift.Int,
+                person: Components.Schemas.AssetFaceResponseDto.PersonPayload? = nil,
+                sourceType: Components.Schemas.SourceType? = nil
+            ) {
+                self.boundingBoxX1 = boundingBoxX1
+                self.boundingBoxX2 = boundingBoxX2
+                self.boundingBoxY1 = boundingBoxY1
+                self.boundingBoxY2 = boundingBoxY2
+                self.id = id
+                self.imageHeight = imageHeight
+                self.imageWidth = imageWidth
+                self.person = person
+                self.sourceType = sourceType
+            }
+            public enum CodingKeys: String, CodingKey {
+                case boundingBoxX1
+                case boundingBoxX2
+                case boundingBoxY1
+                case boundingBoxY2
+                case id
+                case imageHeight
+                case imageWidth
+                case person
+                case sourceType
+            }
+        }
         /// - Remark: Generated from `#/components/schemas/AssetMediaCreateDto`.
         @frozen public enum AssetMediaCreateDto: Sendable, Hashable {
             /// - Remark: Generated from `#/components/schemas/AssetMediaCreateDto/assetData`.
@@ -1989,6 +2105,23 @@ extension Components {
         @frozen public enum MemoryType: String, Codable, Hashable, Sendable, CaseIterable {
             case onThisDay = "on_this_day"
             case birthday = "birthday"
+        }
+        /// - Remark: Generated from `#/components/schemas/MergePersonDto`.
+        public struct MergePersonDto: Codable, Hashable, Sendable {
+            /// Person IDs to merge
+            ///
+            /// - Remark: Generated from `#/components/schemas/MergePersonDto/ids`.
+            public var ids: [Swift.String]
+            /// Creates a new `MergePersonDto`.
+            ///
+            /// - Parameters:
+            ///   - ids: Person IDs to merge
+            public init(ids: [Swift.String]) {
+                self.ids = ids
+            }
+            public enum CodingKeys: String, CodingKey {
+                case ids
+            }
         }
         /// - Remark: Generated from `#/components/schemas/MetadataSearchDto`.
         public struct MetadataSearchDto: Codable, Hashable, Sendable {
@@ -4813,6 +4946,14 @@ extension Components {
                 case withDeleted
                 case withExif
             }
+        }
+        /// Face detection source type
+        ///
+        /// - Remark: Generated from `#/components/schemas/SourceType`.
+        @frozen public enum SourceType: String, Codable, Hashable, Sendable, CaseIterable {
+            case machineLearning = "machine-learning"
+            case exif = "exif"
+            case manual = "manual"
         }
         /// - Remark: Generated from `#/components/schemas/StackCreateDto`.
         public struct StackCreateDto: Codable, Hashable, Sendable {

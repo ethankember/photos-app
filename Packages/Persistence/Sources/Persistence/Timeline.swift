@@ -59,6 +59,17 @@ public struct TimelineItem: Sendable, Hashable, Identifiable {
 }
 
 /// Which of the owner's assets a timeline lists.
+extension TimelineItem {
+    /// Several lists as one, oldest first like the grids, each item once (e.g. a person's photos
+    /// from the Library, Archive and Hidden).
+    public static func mergedOldestFirst(_ lists: [[TimelineItem]]) -> [TimelineItem] {
+        var seen = Set<String>()
+        return lists.joined()
+            .filter { seen.insert($0.id).inserted }
+            .sorted { ($0.date, $0.id) < ($1.date, $1.id) }
+    }
+}
+
 public enum TimelineScope: Sendable, Hashable {
     /// Not trashed, with this visibility (`.timeline` Library, `.archive`, `.locked` Hidden).
     case visibility(RemoteVisibility)

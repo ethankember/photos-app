@@ -11,7 +11,8 @@ import SwiftUI
 ///
 /// Filter chips above the field narrow it to the Library, Archive or Hidden album (which has to
 /// be unlocked), photos or videos, or one album, and choose what the text matches: everything,
-/// the file name, or text in the photo (the server's OCR).
+/// the file name, or text in the photo (the server's OCR). Tapping a face (People on Home, or
+/// people whose name matches what's typed) adds that person as a filter too.
 struct SearchScreen: View {
     let session: LibrarySession
     @Bindable var ui: LibraryUIState
@@ -28,7 +29,7 @@ struct SearchScreen: View {
     @State private var people: [CloudPerson] = []
     /// The user's albums and those shared with them; nil until loaded (or offline).
     @State private var albums: [CloudAlbum]?
-    @State private var albumCache: [AlbumKey: [TimelineItem]] = [:]
+    @State private var serverItemsCache: [ServerItemsKey: [TimelineItem]] = [:]
     @State private var searchedKey: SearchKey?
     @State private var suggestions: [String] = []
     @State private var recentQueries = SearchHistory.queries
@@ -41,7 +42,6 @@ struct SearchScreen: View {
 
     private enum Route: Hashable {
         case viewed, shared
-        case person(CloudPerson)
     }
 
     /// What a search ran for: a change to either runs it again.
@@ -50,8 +50,9 @@ struct SearchScreen: View {
         var filters: SearchFilters
     }
 
-    private struct AlbumKey: Hashable {
-        var albumID: String
+    private struct ServerItemsKey: Hashable {
+        var albumID: String?
+        var personIDs: [String]
         var visibility: CloudVisibility
         var isVideo: Bool?
     }
@@ -72,10 +73,9 @@ struct SearchScreen: View {
         return results + serverResults.filter { !ids.contains($0.id) }
     }
 
-    /// Not in Hidden: a person's page lists their photos from the server, Hidden ones included
-    /// while the Hidden album is unlocked.
+    /// People whose name matches what's typed; tapping one makes them a filter.
     private var matchingPeople: [CloudPerson] {
-        guard filters.field == .anything, filters.scope != .hidden else { return [] }
+        guard filters.field == .anything else { return [] }
         let query = trimmedText.lowercased()
         guard query.count >= 2 else { return [] }
         return people.filter { !$0.name.isEmpty && $0.name.lowercased().contains(query) }
@@ -110,16 +110,12 @@ struct SearchScreen: View {
             .ignoresSafeArea(.keyboard)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Route.self) { route in
-                if case .person(let person) = route {
-                    PersonScreen(person: person, session: session, bottomInset: 0)
-                } else {
-                    let ids = route == .viewed ? viewed : shared
-                    let byID = Dictionary(session.timeline.items.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-                    CollectionGridScreen(
-                        title: route == .viewed ? String(localized: "Recently Viewed") : String(localized: "Recently Shared"),
-                        items: ids.compactMap { byID[$0] }.reversed(), session: session, bottomInset: 0
-                    )
-                }
+                let ids = route == .viewed ? viewed : shared
+                let byID = Dictionary(session.timeline.items.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+                CollectionGridScreen(
+                    title: route == .viewed ? String(localized: "Recently Viewed") : String(localized: "Recently Shared"),
+                    items: ids.compactMap { byID[$0] }.reversed(), session: session, bottomInset: 0
+                )
             }
         }
         .task {
@@ -136,7 +132,7 @@ struct SearchScreen: View {
         // Hidden locks when the app goes to the background: its results go with it.
         .onChange(of: session.hiddenVault.state) { _, state in
             guard state != .unlocked else { return }
-            albumCache = albumCache.filter { $0.key.visibility != .locked }
+            serverItemsCache = serverItemsCache.filter { $0.key.visibility != .locked }
             if filters.scope == .hidden {
                 results = []
                 serverResults = []
@@ -162,21 +158,21 @@ struct SearchScreen: View {
         }
         try? await Task.sleep(for: .milliseconds(180))
         guard !Task.isCancelled else { return }
-        var albumItems: [TimelineItem]?
+        var serverItems: [TimelineItem]?
         var message: String?
-        if let album = filters.album {
+        if filters.needsServerItems {
             do {
-                albumItems = try await items(in: album, filters: filters)
+                serverItems = try await self.serverItems(for: filters)
             } catch {
                 guard !Task.isCancelled else { return }
                 message = Self.message(for: error)
-                albumItems = []
+                serverItems = []
             }
         }
         guard !Task.isCancelled else { return }
         let found: [TimelineItem]
         do {
-            found = try await SearchEngine.search(trimmed, filters: filters, albumItems: albumItems, in: session)
+            found = try await SearchEngine.search(trimmed, filters: filters, serverItems: serverItems, in: session)
         } catch {
             found = []
             message = Self.message(for: error)
@@ -224,20 +220,30 @@ struct SearchScreen: View {
         }
     }
 
-    /// The chosen album's items in the chosen part of the library, from the server (kept while Search is open).
-    private func items(in album: CloudAlbum, filters: SearchFilters) async throws -> [TimelineItem] {
-        let key = AlbumKey(albumID: album.id, visibility: filters.visibility, isVideo: filters.isVideo)
-        if let cached = albumCache[key] { return cached }
+    /// What the server has for the chosen album and people, in the chosen part of the library
+    /// (kept while Search is open).
+    private func serverItems(for filters: SearchFilters) async throws -> [TimelineItem] {
+        let key = ServerItemsKey(albumID: filters.album?.id, personIDs: filters.people.map(\.id), visibility: filters.visibility, isVideo: filters.isVideo)
+        if let cached = serverItemsCache[key] { return cached }
         guard session.connection != nil else {
-            throw CloudError(kind: .transport, message: String(localized: "Searching an album needs a connection to your server."))
+            throw CloudError(kind: .transport, message: filters.album != nil
+                ? String(localized: "Searching an album needs a connection to your server.")
+                : String(localized: "Searching for people needs a connection to your server."))
         }
-        var query = CloudSearchQuery()
-        query.albumID = album.id
-        query.visibility = filters.visibility
-        query.isVideo = filters.isVideo
-        let items = try await session.serverSearch(query, limit: 5000)
-        albumCache[key] = items
+        let items = try await session.serverSearch(filters.cloudQuery, limit: 5000)
+        serverItemsCache[key] = items
         return items
+    }
+
+    /// A face tapped in Search: adds that person as a filter (the typed name was only to find
+    /// them), or takes them out again.
+    private func togglePerson(_ person: CloudPerson) {
+        if filters.people.contains(where: { $0.id == person.id }) {
+            filters.people.removeAll { $0.id == person.id }
+        } else {
+            filters.people.append(person)
+            text = ""
+        }
     }
 
     private func loadAlbums() async {
@@ -402,17 +408,30 @@ struct SearchScreen: View {
         ScrollView(.horizontal) {
             HStack(alignment: .top, spacing: 14) {
                 ForEach(people) { person in
-                    NavigationLink(value: Route.person(person)) {
+                    let selected = filters.people.contains { $0.id == person.id }
+                    Button { togglePerson(person) } label: {
                         VStack(spacing: 5) {
                             PersonFaceView(personID: person.id, session: session, size: 64)
+                                .overlay(alignment: .bottomTrailing) {
+                                    if selected {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 20))
+                                            .foregroundStyle(.white, .tint)
+                                            .offset(x: 2, y: 2)
+                                    }
+                                }
                             Text(person.displayName)
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(person.name.isEmpty ? .secondary : .primary)
                                 .lineLimit(1)
                                 .frame(width: 70)
                         }
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(Text(person.displayName))
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                    .accessibilityHint(Text(selected ? "Removes this person from the search." : "Searches for photos of this person."))
                 }
             }
             .padding(.horizontal, 16)
@@ -522,6 +541,20 @@ struct SearchScreen: View {
     private var filterBar: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
+                if !filters.people.isEmpty {
+                    filterChip(peopleTitle, symbol: "person.crop.circle", active: true, label: "People") {
+                        ForEach(filters.people) { person in
+                            Button(role: .destructive) {
+                                filters.people.removeAll { $0.id == person.id }
+                            } label: {
+                                Label(String(localized: "Remove \(person.displayName)"), systemImage: "minus.circle")
+                            }
+                        }
+                        if filters.people.count > 1 {
+                            Button("Remove All People", role: .destructive) { filters.people = [] }
+                        }
+                    }
+                }
                 filterChip(filters.scope.title, symbol: filters.scope.symbol, active: filters.scope != .library, label: "Look In") {
                     Picker("Look In", selection: Binding(get: { filters.scope }, set: { choose($0) })) {
                         ForEach(SearchFilters.Scope.allCases, id: \.self) { scope in
@@ -576,6 +609,11 @@ struct SearchScreen: View {
         .scrollIndicators(.hidden)
         .scrollClipDisabled()
         .frame(height: 36)
+    }
+
+    private var peopleTitle: String {
+        guard let first = filters.people.first else { return "" }
+        return filters.people.count == 1 ? first.displayName : String(localized: "\(first.displayName) + \(filters.people.count - 1)")
     }
 
     /// A glass chip that opens a menu of choices.

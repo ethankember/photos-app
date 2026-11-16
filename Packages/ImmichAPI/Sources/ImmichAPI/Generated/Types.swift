@@ -152,6 +152,20 @@ public protocol APIProtocol: Sendable {
     /// - Remark: HTTP `POST /auth/validateToken`.
     /// - Remark: Generated from `#/paths//auth/validateToken/post(validateAccessToken)`.
     func validateAccessToken(_ input: Operations.ValidateAccessToken.Input) async throws -> Operations.ValidateAccessToken.Output
+    /// Retrieve faces for asset
+    ///
+    /// Retrieve all faces belonging to an asset.
+    ///
+    /// - Remark: HTTP `GET /faces`.
+    /// - Remark: Generated from `#/paths//faces/get(getFaces)`.
+    func getFaces(_ input: Operations.GetFaces.Input) async throws -> Operations.GetFaces.Output
+    /// Delete a face
+    ///
+    /// Delete a face identified by the id. Optionally can be force deleted.
+    ///
+    /// - Remark: HTTP `DELETE /faces/{id}`.
+    /// - Remark: Generated from `#/paths//faces/{id}/delete(deleteFace)`.
+    func deleteFace(_ input: Operations.DeleteFace.Input) async throws -> Operations.DeleteFace.Output
     /// Retrieve memories
     ///
     /// Retrieve a list of memories. Memories are sorted descending by creation date by default, although they can also be sorted in ascending order, or randomly.
@@ -194,6 +208,13 @@ public protocol APIProtocol: Sendable {
     /// - Remark: HTTP `GET /people`.
     /// - Remark: Generated from `#/paths//people/get(getAllPeople)`.
     func getAllPeople(_ input: Operations.GetAllPeople.Input) async throws -> Operations.GetAllPeople.Output
+    /// Merge people
+    ///
+    /// Merge an ordered list of people together into a single person. The final name and birth date are always the first defined value, following the order. Also automatically merges people for other users in the cluster group, skipping people that would result in overriding a previously set name or birth date.
+    ///
+    /// - Remark: HTTP `POST /people/merge`.
+    /// - Remark: Generated from `#/paths//people/merge/post(mergePeople)`.
+    func mergePeople(_ input: Operations.MergePeople.Input) async throws -> Operations.MergePeople.Output
     /// Get a person
     ///
     /// Retrieve a person by id.
@@ -622,6 +643,36 @@ extension APIProtocol {
     public func validateAccessToken(headers: Operations.ValidateAccessToken.Input.Headers = .init()) async throws -> Operations.ValidateAccessToken.Output {
         try await validateAccessToken(Operations.ValidateAccessToken.Input(headers: headers))
     }
+    /// Retrieve faces for asset
+    ///
+    /// Retrieve all faces belonging to an asset.
+    ///
+    /// - Remark: HTTP `GET /faces`.
+    /// - Remark: Generated from `#/paths//faces/get(getFaces)`.
+    public func getFaces(
+        query: Operations.GetFaces.Input.Query,
+        headers: Operations.GetFaces.Input.Headers = .init()
+    ) async throws -> Operations.GetFaces.Output {
+        try await getFaces(Operations.GetFaces.Input(
+            query: query,
+            headers: headers
+        ))
+    }
+    /// Delete a face
+    ///
+    /// Delete a face identified by the id. Optionally can be force deleted.
+    ///
+    /// - Remark: HTTP `DELETE /faces/{id}`.
+    /// - Remark: Generated from `#/paths//faces/{id}/delete(deleteFace)`.
+    public func deleteFace(
+        path: Operations.DeleteFace.Input.Path,
+        body: Operations.DeleteFace.Input.Body
+    ) async throws -> Operations.DeleteFace.Output {
+        try await deleteFace(Operations.DeleteFace.Input(
+            path: path,
+            body: body
+        ))
+    }
     /// Retrieve memories
     ///
     /// Retrieve a list of memories. Memories are sorted descending by creation date by default, although they can also be sorted in ascending order, or randomly.
@@ -706,6 +757,21 @@ extension APIProtocol {
         try await getAllPeople(Operations.GetAllPeople.Input(
             query: query,
             headers: headers
+        ))
+    }
+    /// Merge people
+    ///
+    /// Merge an ordered list of people together into a single person. The final name and birth date are always the first defined value, following the order. Also automatically merges people for other users in the cluster group, skipping people that would result in overriding a previously set name or birth date.
+    ///
+    /// - Remark: HTTP `POST /people/merge`.
+    /// - Remark: Generated from `#/paths//people/merge/post(mergePeople)`.
+    public func mergePeople(
+        headers: Operations.MergePeople.Input.Headers = .init(),
+        body: Operations.MergePeople.Input.Body
+    ) async throws -> Operations.MergePeople.Output {
+        try await mergePeople(Operations.MergePeople.Input(
+            headers: headers,
+            body: body
         ))
     }
     /// Get a person

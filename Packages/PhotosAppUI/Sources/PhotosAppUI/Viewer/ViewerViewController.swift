@@ -373,6 +373,12 @@ final class ViewerViewController: UIViewController {
         setChromeAlpha(chromeHidden ? 0 : 1)
     }
 
+    /// In the Hidden album: opened from it, or a hidden photo among others (a person's photos
+    /// with Show Hidden), as the photo's record on this iPhone says.
+    private func isInHidden(_ item: TimelineItem) -> Bool {
+        mode == .hidden || (item.isRemote && session.detailsNow(for: item.id)?.asset.visibility == .locked)
+    }
+
     /// In a library someone else shares with the signed-in user.
     private func isShared(_ item: TimelineItem) -> Bool {
         item.isRemote && !item.ownerID.isEmpty && item.ownerID != session.account.userID
@@ -386,7 +392,7 @@ final class ViewerViewController: UIViewController {
         let duplicate = UIAction(title: String(localized: "Duplicate"), image: UIImage(systemName: "plus.square.on.square")) { [weak self] _ in
             self?.duplicateCurrent()
         }
-        let hide: UIAction = mode == .hidden
+        let hide: UIAction = isInHidden(item)
             ? UIAction(title: String(localized: "Unhide"), image: UIImage(systemName: "eye")) { [weak self] _ in self?.unhideCurrent() }
             : UIAction(title: String(localized: "Hide"), image: UIImage(systemName: "eye.slash")) { [weak self] _ in self?.confirmHide() }
         let row = UIMenu(options: .displayInline, preferredElementSize: .medium, children: [copy, duplicate, hide])
@@ -452,7 +458,7 @@ final class ViewerViewController: UIViewController {
         }
         // Locked (hidden) assets can't be in albums on Immich, so Add To is only offered in the library.
         // In an album there's nothing to add it to: Remove from Album instead.
-        let collections = mode == .hidden || album != nil ? [adjustInfo] : [addTo, adjustInfo]
+        let collections = isInHidden(item) || album != nil ? [adjustInfo] : [addTo, adjustInfo]
         var sections: [UIMenuElement] = [
             row,
             UIMenu(options: .displayInline, children: [slideshow]),
@@ -461,7 +467,7 @@ final class ViewerViewController: UIViewController {
         if album != nil {
             sections.append(UIMenu(options: .displayInline, children: [removeFromAlbum]))
         }
-        if !item.isLocal && mode == .library {
+        if !item.isLocal && mode == .library && !isInHidden(item) {
             sections.append(UIMenu(options: .displayInline, children: [
                 UIAction(title: String(localized: "Save to This iPhone"), image: UIImage(systemName: "square.and.arrow.down")) { [weak self] _ in
                     self?.saveCurrentToPhone()
@@ -493,7 +499,7 @@ final class ViewerViewController: UIViewController {
         banner.show(String(localized: "Duplicating…"), duration: 600)
         Task {
             do {
-                try await session.duplicate(assetID: item.id, keepHidden: mode == .hidden)
+                try await session.duplicate(assetID: item.id, keepHidden: isInHidden(item))
                 banner.show(item.isVideo ? String(localized: "Video duplicated") : String(localized: "Photo duplicated"))
             } catch {
                 banner.hide()

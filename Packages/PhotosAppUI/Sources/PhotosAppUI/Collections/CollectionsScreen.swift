@@ -64,6 +64,10 @@ struct CollectionsScreen: View {
         .task(id: "\(model.isSyncPaused) \(session.connection != nil)") {
             await collections.load(from: session, force: session.connection != nil && !model.isSyncPaused)
         }
+        // After a merge, so merged people don't linger in People.
+        .onChange(of: session.peopleVersion) {
+            Task { await collections.load(from: session, force: true) }
+        }
         // Albums, memories and people change on the server (face recognition finds people
         // over hours), so they're fetched again on coming back here (at most once a minute).
         .onChange(of: ui.section) { _, section in

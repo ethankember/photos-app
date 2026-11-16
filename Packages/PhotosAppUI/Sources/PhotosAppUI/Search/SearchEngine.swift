@@ -57,14 +57,15 @@ enum SearchEngine {
     /// Matching Library items, newest first (Recents' cards).
     @MainActor
     static func search(_ text: String, in session: LibrarySession) async -> [TimelineItem] {
-        (try? await search(text, filters: SearchFilters(), albumItems: nil, in: session)) ?? []
+        (try? await search(text, filters: SearchFilters(), serverItems: nil, in: session)) ?? []
     }
 
-    /// Matches on this phone, newest first, within `filters`. `albumItems`: the chosen album's
-    /// items (from the server, newest first) when an album is chosen. Text in photos is only on
-    /// the server, so that search has no matches here. Throws for Hidden while it's locked.
+    /// Matches on this phone, newest first, within `filters`. `serverItems`: what the server has
+    /// for the filters only it knows (an album, people), newest first, when any is chosen. Text
+    /// in photos is only on the server, so that search has no matches here. Throws for Hidden
+    /// while it's locked.
     @MainActor
-    static func search(_ text: String, filters: SearchFilters, albumItems: [TimelineItem]?, in session: LibrarySession) async throws -> [TimelineItem] {
+    static func search(_ text: String, filters: SearchFilters, serverItems: [TimelineItem]?, in session: LibrarySession) async throws -> [TimelineItem] {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         let query: Query
         var candidates: [TimelineItem]
@@ -84,8 +85,8 @@ enum SearchEngine {
                     try session.requireSearchable(filters.visibility)
                     return []
                 }
-                if let albumItems {
-                    candidates = albumItems
+                if let serverItems {
+                    candidates = serverItems
                 } else {
                     candidates = try await session.items(in: filters.visibility).reversed()
                 }
@@ -93,10 +94,10 @@ enum SearchEngine {
                 candidates = try await session.search(query.words.joined(separator: " "), in: filters.visibility)
             }
         }
-        let inAlbum = albumItems.map { Set($0.map(\.id)) }
+        let allowed = serverItems.map { Set($0.map(\.id)) }
         let calendar = Formatting.wallClock
         return candidates.filter { item in
-            if let inAlbum, !inAlbum.contains(item.id) { return false }
+            if let allowed, !allowed.contains(item.id) { return false }
             if filters.media == .videos && !item.isVideo { return false }
             if filters.media == .photos && item.isVideo { return false }
             if query.videos && !item.isVideo { return false }

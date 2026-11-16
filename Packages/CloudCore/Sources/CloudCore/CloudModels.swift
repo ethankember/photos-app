@@ -138,6 +138,18 @@ public struct CloudPerson: Sendable, Hashable, Identifiable {
     }
 }
 
+/// A face the server's face recognition found in a photo.
+public struct CloudFace: Sendable, Hashable, Identifiable {
+    public let id: String
+    /// Who it is; nil while it isn't anyone yet.
+    public let personID: String?
+
+    public init(id: String, personID: String?) {
+        self.id = id
+        self.personID = personID
+    }
+}
+
 /// A public link to some assets (anyone with it can view and download).
 public struct CloudSharedLink: Sendable, Hashable {
     public let id: String

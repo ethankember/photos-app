@@ -24,15 +24,21 @@ struct SearchFilters: Hashable {
     var scope = Scope.library
     var media = Media.all
     var album: CloudAlbum?
+    /// Photos with all of these people in them (the server's face recognition).
+    var people: [CloudPerson] = []
     var field = Field.anything
 
     var isDefault: Bool { self == SearchFilters() }
 
-    /// Shows results before anything is typed: browsing the Archive, Hidden, an album, or only
-    /// photos or videos.
+    /// Shows results before anything is typed: browsing the Archive, Hidden, an album, someone's
+    /// photos, or only photos or videos.
     var listsWithoutText: Bool {
-        field == .anything && (scope != .library || media != .all || album != nil)
+        field == .anything && (scope != .library || media != .all || album != nil || !people.isEmpty)
     }
+
+    /// Filters only the server knows (the phone has no album or face data): their items come
+    /// from the server and narrow what's found on the phone.
+    var needsServerItems: Bool { album != nil || !people.isEmpty }
 
     var visibility: CloudVisibility {
         switch scope {
@@ -55,6 +61,7 @@ struct SearchFilters: Hashable {
     var cloudQuery: CloudSearchQuery {
         var query = CloudSearchQuery()
         query.albumID = album?.id
+        query.personIDs = people.map(\.id)
         query.isVideo = isVideo
         query.visibility = visibility
         return query

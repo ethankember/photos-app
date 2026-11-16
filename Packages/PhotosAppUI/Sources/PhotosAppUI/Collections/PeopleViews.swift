@@ -105,14 +105,15 @@ struct PeopleScreen: View {
         }
         .navigationTitle("People")
         .navigationBarTitleDisplayMode(.large)
-        .task {
+        .task(id: session.peopleVersion) {
             if people == nil { people = initial }
             do { people = try await session.people() } catch { if people == nil { self.error = (error as? CloudError)?.message ?? error.localizedDescription } }
         }
     }
 }
 
-/// One person's photos, with naming (typed, or from a contact).
+/// One person's photos, with naming (typed, or from a contact), merging other people into
+/// them, and ··· › Show Archived / Show Hidden (Hidden needs Face ID, and locks again on leaving).
 struct PersonScreen: View {
     @State var person: CloudPerson
     let session: LibrarySession
@@ -121,6 +122,22 @@ struct PersonScreen: View {
     @State private var error: String?
     @State private var naming = false
     @State private var draftName = ""
+    @State private var showsArchived = false
+    @State private var showsHidden = false
+    /// This page unlocked the Hidden album, so leaving it locks it again (not when it was
+    /// already open, e.g. from a photo in the Hidden album).
+    @State private var unlockedHere = false
+    @State private var merging = false
+    @State private var alert: String?
+    @State private var reload = 0
+
+    private var vault: HiddenVault { session.hiddenVault }
+
+    private struct LoadKey: Hashable {
+        var archived: Bool
+        var hidden: Bool
+        var reload: Int
+    }
 
     var body: some View {
         CollectionGridScreen(title: person.displayName, items: items ?? [], session: session, bottomInset: bottomInset,
@@ -128,11 +145,20 @@ struct PersonScreen: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button {
-                            draftName = person.name
-                            naming = true
-                        } label: { Label(person.name.isEmpty ? "Add Name" : "Rename", systemImage: "pencil") }
-                        Button { nameFromContact() } label: { Label("Name from Contacts", systemImage: "person.crop.circle") }
+                        Section {
+                            Button {
+                                draftName = person.name
+                                naming = true
+                            } label: { Label(person.name.isEmpty ? "Add Name" : "Rename", systemImage: "pencil") }
+                            Button { nameFromContact() } label: { Label("Name from Contacts", systemImage: "person.crop.circle") }
+                            Button { merging = true } label: { Label("Merge with Others…", systemImage: "person.2.badge.plus") }
+                        }
+                        Section {
+                            Toggle(isOn: $showsArchived) { Label("Show Archived", systemImage: "archivebox") }
+                            Toggle(isOn: Binding(get: { showsHidden }, set: { setShowsHidden($0) })) {
+                                Label("Show Hidden", systemImage: "eye.slash")
+                            }
+                        }
                     } label: {
                         Image(systemName: "ellipsis")
                     }
@@ -145,12 +171,80 @@ struct PersonScreen: View {
                 Button("Cancel", role: .cancel) {}
                 Button("Done") { rename(to: draftName, birthDate: nil) }
             }
-            .task {
-                do { items = try await session.personItems(person.id) } catch {
-                    self.error = (error as? CloudError)?.message ?? error.localizedDescription
-                    items = []
+            .alert(alert ?? "", isPresented: Binding(get: { alert != nil }, set: { if !$0 { alert = nil } })) {
+                Button("OK", role: .cancel) {}
+            }
+            .sheet(isPresented: $merging) {
+                MergePeopleSheet(person: person, session: session) {
+                    Task { await refreshPerson() }
                 }
             }
+            .task(id: LoadKey(archived: showsArchived, hidden: showsHidden, reload: reload)) {
+                await load()
+            }
+            // Hidden locks when the app goes to the background (or elsewhere): its photos go too.
+            .onChange(of: vault.state) { _, state in
+                guard state != .unlocked, showsHidden else { return }
+                showsHidden = false
+                unlockedHere = false
+            }
+            .onDisappear {
+                if unlockedHere {
+                    unlockedHere = false
+                    Task { await vault.lock() }
+                }
+            }
+    }
+
+    private func load() async {
+        var visibilities: [CloudVisibility] = [.timeline]
+        if showsArchived { visibilities.append(.archive) }
+        if showsHidden, vault.state == .unlocked { visibilities.append(.locked) }
+        do {
+            let loaded = try await session.personItems(person.id, in: visibilities)
+            guard !Task.isCancelled else { return }
+            items = loaded
+            error = nil
+        } catch {
+            guard !Task.isCancelled else { return }
+            self.error = (error as? CloudError)?.message ?? error.localizedDescription
+            items = []
+        }
+    }
+
+    /// Hidden photos need the Hidden album unlocked (Face ID, with its PIN already on this iPhone).
+    private func setShowsHidden(_ show: Bool) {
+        guard show else {
+            showsHidden = false
+            if unlockedHere {
+                unlockedHere = false
+                Task { await vault.lock() }
+            }
+            return
+        }
+        guard vault.state != .unlocked else {
+            showsHidden = true
+            return
+        }
+        guard vault.hasStoredPin else {
+            alert = String(localized: "Open Hidden in Albums first to set it up on this iPhone.")
+            return
+        }
+        Task {
+            if await vault.unlock() {
+                unlockedHere = true
+                showsHidden = true
+            } else {
+                alert = vault.errorMessage ?? String(localized: "The Hidden album is still locked.")
+                await vault.lock()
+            }
+        }
+    }
+
+    /// After a merge: the name may have changed (taken from a merged person) and there are more photos.
+    private func refreshPerson() async {
+        if let updated = try? await session.person(id: person.id) { person = updated }
+        reload += 1
     }
 
     private func rename(to name: String, birthDate: String?) {
@@ -177,6 +271,157 @@ struct PersonScreen: View {
             }
             PersonContacts.link(personID: personID, contactID: contact.identifier)
             rename(to: name, birthDate: birthDate)
+        }
+    }
+}
+
+/// Person › Merge with Others…: choose the people who are really this person. Their photos
+/// become this person's; it keeps its name and birthday (taking the first chosen one's when it
+/// has none). Immich can't undo a merge, so it's confirmed first.
+struct MergePeopleSheet: View {
+    let person: CloudPerson
+    let session: LibrarySession
+    let onMerged: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var people: [CloudPerson]?
+    /// In the order chosen (the server takes a missing name from the first).
+    @State private var chosen: [String] = []
+    @State private var query = ""
+    @State private var confirming = false
+    @State private var isMerging = false
+    @State private var error: String?
+
+    private var candidates: [CloudPerson] {
+        let others = orderedPeople((people ?? []).filter { $0.id != person.id })
+        let typed = query.trimmingCharacters(in: .whitespaces)
+        guard !typed.isEmpty else { return others }
+        return others.filter { $0.name.localizedCaseInsensitiveContains(typed) }
+    }
+
+    private var confirmTitle: String {
+        person.name.isEmpty
+            ? String(localized: "Merge \(chosen.count) with this person?")
+            : String(localized: "Merge \(chosen.count) into \(person.name)?")
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(person.name.isEmpty
+                         ? "Choose the people who are also this person. Their photos will be this person's."
+                         : "Choose the people who are also \(person.name). Their photos will be \(person.name)'s.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 20)
+                    if let error {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .font(.subheadline)
+                            .foregroundStyle(.red)
+                            .padding(.horizontal, 20)
+                    }
+                    if people == nil {
+                        ProgressView().frame(maxWidth: .infinity).padding(.top, 60)
+                    } else if candidates.isEmpty {
+                        ContentUnavailableView("No People", systemImage: "person.2.crop.square.stack")
+                            .padding(.top, 40)
+                    } else {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3), spacing: 20) {
+                            ForEach(candidates) { other in
+                                candidate(other)
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                    }
+                }
+                .padding(.vertical, 12)
+            }
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Names")
+            .navigationTitle("Merge People")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(isMerging)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if isMerging {
+                        ProgressView()
+                    } else {
+                        Button("Merge") { confirming = true }
+                            .disabled(chosen.isEmpty)
+                    }
+                }
+            }
+            .confirmationDialog(confirmTitle, isPresented: $confirming, titleVisibility: .visible) {
+                Button("Merge", role: .destructive) { merge() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Their photos and faces move to this person. This can't be undone.")
+            }
+            .interactiveDismissDisabled(isMerging)
+            .task { await loadPeople() }
+        }
+    }
+
+    private func candidate(_ other: CloudPerson) -> some View {
+        let isChosen = chosen.contains(other.id)
+        return Button {
+            if isChosen { chosen.removeAll { $0 == other.id } } else { chosen.append(other.id) }
+        } label: {
+            VStack(spacing: 6) {
+                PersonFaceView(personID: other.id, session: session, size: 92)
+                    .overlay {
+                        if isChosen {
+                            Circle().strokeBorder(.tint, lineWidth: 3)
+                        }
+                    }
+                    .overlay(alignment: .bottomTrailing) {
+                        if isChosen {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundStyle(.white, .tint)
+                        }
+                    }
+                Text(other.displayName)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(other.name.isEmpty ? .secondary : .primary)
+                    .lineLimit(1)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isMerging)
+        .accessibilityLabel(Text(other.displayName))
+        .accessibilityAddTraits(isChosen ? .isSelected : [])
+    }
+
+    private func loadPeople() async {
+        do {
+            people = try await session.people()
+        } catch {
+            people = []
+            self.error = (error as? CloudError)?.message ?? error.localizedDescription
+        }
+    }
+
+    private func merge() {
+        let others = chosen
+        isMerging = true
+        error = nil
+        Task {
+            do {
+                try await session.mergePeople(into: person.id, from: others)
+                onMerged()
+                dismiss()
+            } catch {
+                // Some may have merged: show what's left.
+                self.error = (error as? CloudError)?.message ?? error.localizedDescription
+                isMerging = false
+                chosen = []
+                onMerged()
+                await loadPeople()
+            }
         }
     }
 }

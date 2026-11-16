@@ -44,11 +44,50 @@ extension LibrarySession {
         try await connected().updatePerson(id: id, name: name, birthDate: birthDate)
     }
 
-    /// A person's photos, oldest first like the Library grid.
-    func personItems(_ personID: String) async throws -> [TimelineItem] {
-        var query = CloudSearchQuery()
-        query.personIDs = [personID]
-        return try await connected().search(query, limit: 5000).map(TimelineItem.init).reversed()
+    /// A person's photos in the Library, and in the Archive or the Hidden album when asked
+    /// (Hidden must be unlocked), oldest first like the Library grid. Each part is asked for by
+    /// name: left out, the server would add Hidden photos whenever the Hidden album is unlocked.
+    func personItems(_ personID: String, in visibilities: [CloudVisibility] = [.timeline]) async throws -> [TimelineItem] {
+        for visibility in visibilities { try requireSearchable(visibility) }
+        let connection = try connected()
+        var lists: [[TimelineItem]] = []
+        for visibility in visibilities {
+            var query = CloudSearchQuery()
+            query.personIDs = [personID]
+            query.visibility = visibility
+            lists.append(try await connection.search(query, limit: 5000).map(TimelineItem.init))
+        }
+        return TimelineItem.mergedOldestFirst(lists)
+    }
+
+    /// One person as the server has them now (after a rename or a merge).
+    func person(id: String) async throws -> CloudPerson {
+        try await connected().person(id: id)
+    }
+
+    /// Merges `others` into `personID`: their photos become this person's. It keeps its name and
+    /// birthday (taking theirs when it has none). Can't be undone; throws when any wasn't merged.
+    func mergePeople(into personID: String, from others: [String]) async throws {
+        ActionLog.write("merge people: \(others.count) into one")
+        let unmerged = try await connected().mergePeople([personID] + others)
+        peopleVersion += 1
+        guard unmerged.isEmpty else {
+            throw CloudError(kind: .http(status: 400), message: unmerged.count == others.count + 1 || unmerged.contains(personID)
+                ? String(localized: "The server didn't merge these people.")
+                : String(localized: "\(unmerged.count) of them couldn't be merged."))
+        }
+    }
+
+    /// Takes a person out of one photo (each of their faces in it), the way Immich's web app does.
+    func removePerson(_ personID: String, fromAsset assetID: String) async throws {
+        try requireServerItems([assetID])
+        let connection = try connected()
+        let faces = try await connection.faces(inAsset: assetID).filter { $0.personID == personID }
+        guard !faces.isEmpty else {
+            throw CloudError(kind: .http(status: 404), message: String(localized: "This person is no longer in this photo."))
+        }
+        ActionLog.write("remove person from photo: \(faces.count) face(s)")
+        for face in faces { try await connection.removeFace(id: face.id) }
     }
 
     /// Photos matching a description, best matches first, narrowed by `filters`.

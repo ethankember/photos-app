@@ -89,6 +89,16 @@ private func asset(_ index: Int, owner: String = "me", visibility: RemoteVisibil
         #expect(try ids("heic", true).count == 3)
     }
 
+    @Test func mergedListsAreOldestFirstWithoutRepeats() throws {
+        let database = try AppDatabase.inMemory()
+        try database.writer.write { db in try RemoteStore.upsert([asset(1), asset(2), asset(3)], in: db) }
+        let items = try database.reader.read { db in try TimelineQuery.remote(ownerID: "me", in: db) }
+        let byID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        let one = byID["asset-000001"]!, two = byID["asset-000002"]!, three = byID["asset-000003"]!
+        let merged = TimelineItem.mergedOldestFirst([[three, one], [two, one], []])
+        #expect(merged.map(\.id) == ["asset-000001", "asset-000002", "asset-000003"])
+    }
+
     @Test func upsertUpdatesInPlace() throws {
         let database = try AppDatabase.inMemory()
         var record = asset(1)

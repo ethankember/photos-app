@@ -63,6 +63,77 @@ extension Client {
         }
     }
 
+    /// One person as the server has them now.
+    public func person(id: String) async throws -> CloudPerson {
+        do {
+            switch try await getPerson(path: .init(id: id)) {
+            case .ok(let response):
+                return try CloudPerson(response.body.json)
+            case .undocumented(let status, let payload):
+                throw await APIError.from(statusCode: status, payload: payload, operation: "load this person")
+            }
+        } catch {
+            throw APIError.wrap(error, operation: "Person")
+        }
+    }
+
+    /// `POST /people/merge`: merges the people into the first (Immich keeps the first one's name
+    /// and birthday, taking the next one's when it has none). Returns the IDs not merged.
+    public func mergePeople(ids: [String]) async throws -> [String] {
+        do {
+            switch try await mergePeople(body: .json(Self.mergeBody(ids))) {
+            case .ok(let response):
+                return Self.unmergedIDs(try response.body.json, requested: ids)
+            case .undocumented(let status, let payload):
+                throw await APIError.from(statusCode: status, payload: payload, operation: "merge these people")
+            }
+        } catch {
+            throw APIError.wrap(error, operation: "Merge people")
+        }
+    }
+
+    /// The faces in a photo (soft-deleted ones aren't listed).
+    public func faces(inAsset assetID: String) async throws -> [CloudFace] {
+        do {
+            switch try await getFaces(query: .init(id: assetID)) {
+            case .ok(let response):
+                return try response.body.json.map { CloudFace(id: $0.id, personID: $0.person?.value1.id) }
+            case .undocumented(let status, let payload):
+                throw await APIError.from(statusCode: status, payload: payload, operation: "load the faces in this photo")
+            }
+        } catch {
+            throw APIError.wrap(error, operation: "Faces")
+        }
+    }
+
+    /// `DELETE /faces/{id}`, the way Immich's web app removes a face: not forced, so the server
+    /// keeps it as deleted and face recognition doesn't put it back.
+    public func removeFace(id: String) async throws {
+        do {
+            switch try await deleteFace(path: .init(id: id), body: .json(Self.removeFaceBody)) {
+            case .noContent:
+                return
+            case .undocumented(let status, let payload):
+                throw await APIError.from(statusCode: status, payload: payload, operation: "remove this face")
+            }
+        } catch {
+            throw APIError.wrap(error, operation: "Remove face")
+        }
+    }
+
+    /// The merge request: the order matters, the first is kept.
+    static func mergeBody(_ ids: [String]) -> Components.Schemas.MergePersonDto {
+        Components.Schemas.MergePersonDto(ids: ids)
+    }
+
+    static let removeFaceBody = Components.Schemas.AssetFaceDeleteDto(force: false)
+
+    /// The requested IDs the server didn't report as merged (the first is the one kept).
+    static func unmergedIDs(_ results: [Components.Schemas.BulkIdResponseDto], requested ids: [String]) -> [String] {
+        let merged = Set(results.filter(\.success).map(\.id))
+        return ids.filter { !merged.contains($0) }
+    }
+
     /// Search by meaning, narrowed by `filters`, in pages of 100 up to `limit`.
     public func smartSearch(_ text: String, filters: CloudSearchQuery = CloudSearchQuery(), limit: Int) async throws -> [CloudAsset] {
         var results: [CloudAsset] = []

@@ -66,6 +66,19 @@ final class InfoModel {
         }
     }
 
+    /// Takes a person out of this photo on the server (Immich keeps the face as removed, so face
+    /// recognition doesn't put it back). Returns why it failed.
+    func remove(_ person: CloudPerson) async -> String? {
+        let assetID = assetID
+        do {
+            try await session.removePerson(person.id, fromAsset: assetID)
+            if self.assetID == assetID { people.removeAll { $0.id == person.id } }
+            return nil
+        } catch {
+            return (error as? CloudError)?.message ?? error.localizedDescription
+        }
+    }
+
     func saveCaption() {
         let text = caption.trimmingCharacters(in: .whitespacesAndNewlines)
         guard text != (details?.exif?.description ?? "") else { return }
@@ -92,6 +105,8 @@ struct InfoView: View {
     @FocusState private var captionFocused: Bool
     @Environment(\.openURL) private var openURL
     @State private var openedPerson: CloudPerson?
+    @State private var removingPerson: CloudPerson?
+    @State private var removalError: String?
 
     var body: some View {
         VStack(spacing: 14) {
@@ -113,7 +128,8 @@ struct InfoView: View {
         .frame(maxWidth: .infinity, alignment: .top)
     }
 
-    /// Faces recognised in the photo, with names; tap for that person's photos.
+    /// Faces recognised in the photo, with names; tap for that person's photos, touch and hold
+    /// to take the person out of this photo.
     private var peopleRow: some View {
         ScrollView(.horizontal) {
             HStack(alignment: .top, spacing: 14) {
@@ -127,8 +143,18 @@ struct InfoView: View {
                                 .lineLimit(1)
                                 .frame(width: 64)
                         }
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .contextMenu {
+                        Button { openedPerson = person } label: {
+                            Label("Show Photos", systemImage: "person.crop.square")
+                        }
+                        Button(role: .destructive) { removingPerson = person } label: {
+                            Label("Remove from This Photo", systemImage: "person.crop.circle.badge.minus")
+                        }
+                    }
+                    .accessibilityAction(named: Text("Remove from This Photo")) { removingPerson = person }
                 }
             }
             .padding(.horizontal, 4)
@@ -140,6 +166,22 @@ struct InfoView: View {
                 PersonScreen(person: person, session: model.session, bottomInset: 0)
             }
             .environment(\.phoneImages, model.session.phoneImages)
+        }
+        .confirmationDialog(
+            removingPerson.map { $0.name.isEmpty ? String(localized: "Remove this person from this photo?") : String(localized: "Remove \($0.name) from this photo?") } ?? "",
+            isPresented: Binding(get: { removingPerson != nil }, set: { if !$0 { removingPerson = nil } }),
+            titleVisibility: .visible,
+            presenting: removingPerson
+        ) { person in
+            Button("Remove", role: .destructive) {
+                Task { removalError = await model.remove(person) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("The photo won't be among their photos any more, and face recognition won't add it back.")
+        }
+        .alert(removalError ?? "", isPresented: Binding(get: { removalError != nil }, set: { if !$0 { removalError = nil } })) {
+            Button("OK", role: .cancel) {}
         }
     }
 
