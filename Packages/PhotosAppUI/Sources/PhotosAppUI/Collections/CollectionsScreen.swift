@@ -84,6 +84,10 @@ struct CollectionsScreen: View {
         .onChange(of: path) {
             if path.isEmpty { lockHiddenOpenedForPeople() }
         }
+        // Locked some other way (e.g. in the background): People no longer owns an unlock.
+        .onChange(of: session.hiddenVault.state) { _, state in
+            if state != .unlocked { session.peopleScreenUnlockedHidden = false }
+        }
         // Albums, memories and people change on the server (face recognition finds people
         // over hours), so they're fetched again on coming back here (at most once a minute).
         .onChange(of: ui.section) { _, section in

@@ -75,23 +75,40 @@ struct PeopleScreen: View {
     let session: LibrarySession
     let initial: [CloudPerson]?
     let bottomInset: CGFloat
+    /// The Library's people, and the Archive's when shown.
     @State private var people: [CloudPerson]?
+    /// The Hidden album's, kept apart so they go the moment it locks.
+    @State private var hiddenPeople: [CloudPerson] = []
     @State private var error: String?
+    /// Finding the Archive's or Hidden's people failed (shown, not just an unchanged list).
+    @State private var scanError: String?
     @AppStorage(PhotosSettings.peopleFromArchive) private var fromArchive = false
     @State private var fromHidden = false
     @State private var alert: String?
 
     private var vault: HiddenVault { session.hiddenVault }
 
+    private var shown: [CloudPerson]? {
+        guard let people else { return nil }
+        return fromHidden ? LibrarySession.merged([people, hiddenPeople]) : people
+    }
+
     private struct LoadKey: Hashable {
         var version: Int
         var archive: Bool
-        var hidden: Bool
     }
 
     var body: some View {
         ScrollView {
-            if let people, !people.isEmpty {
+            if let scanError {
+                Label(scanError, systemImage: "exclamationmark.triangle")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
+            }
+            if let people = shown, !people.isEmpty {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3), spacing: 20) {
                     ForEach(orderedPeople(people)) { person in
                         NavigationLink(value: CollectionRoute.person(person)) {
@@ -108,7 +125,7 @@ struct PeopleScreen: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, bottomInset + 20)
-            } else if people == nil, error == nil {
+            } else if shown == nil, error == nil {
                 ProgressView().padding(.top, 80)
             } else {
                 ContentUnavailableView("No People", systemImage: "person.2.crop.square.stack",
@@ -134,28 +151,58 @@ struct PeopleScreen: View {
         .alert(alert ?? "", isPresented: Binding(get: { alert != nil }, set: { if !$0 { alert = nil } })) {
             Button("OK", role: .cancel) {}
         }
-        .task(id: LoadKey(version: session.peopleVersion, archive: fromArchive, hidden: fromHidden)) {
+        .task(id: LoadKey(version: session.peopleVersion, archive: fromArchive)) {
             await load()
         }
-        // Hidden locks when the app goes to the background (or on leaving People): its people go too.
+        .task(id: fromHidden) {
+            await loadHidden()
+        }
+        // Hidden locks when the app goes to the background (or on leaving People): its people
+        // go at once, not on the next load.
         .onChange(of: vault.state) { _, state in
-            if state != .unlocked { fromHidden = false }
+            guard state != .unlocked else { return }
+            hiddenPeople = []
+            fromHidden = false
         }
     }
 
     private func load() async {
         if people == nil { people = initial }
+        let library: [CloudPerson]
         do {
-            var lists = [try await session.listedPeople(includingArchive: fromArchive)]
-            if fromHidden, vault.state == .unlocked {
-                lists.append(try await session.people(in: .locked))
-            }
-            guard !Task.isCancelled else { return }
-            people = LibrarySession.merged(lists)
-            error = nil
+            library = try await session.people()
         } catch {
             guard !Task.isCancelled else { return }
             if people == nil { self.error = (error as? CloudError)?.message ?? error.localizedDescription }
+            return
+        }
+        var archive: [CloudPerson] = []
+        var failure: String?
+        if fromArchive {
+            do {
+                archive = try await session.people(in: .archive)
+            } catch {
+                failure = String(localized: "Couldn't find the Archive's people: \((error as? CloudError)?.message ?? error.localizedDescription)")
+            }
+        }
+        guard !Task.isCancelled else { return }
+        people = LibrarySession.merged([library, archive])
+        error = nil
+        scanError = failure
+    }
+
+    private func loadHidden() async {
+        guard fromHidden, vault.state == .unlocked else {
+            hiddenPeople = []
+            return
+        }
+        do {
+            let found = try await session.people(in: .locked)
+            guard !Task.isCancelled, fromHidden, vault.state == .unlocked else { return }
+            hiddenPeople = found
+        } catch {
+            guard !Task.isCancelled else { return }
+            scanError = String(localized: "Couldn't find the Hidden album's people: \((error as? CloudError)?.message ?? error.localizedDescription)")
         }
     }
 

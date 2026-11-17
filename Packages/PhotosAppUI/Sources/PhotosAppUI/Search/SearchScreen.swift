@@ -251,13 +251,15 @@ struct SearchScreen: View {
         }
     }
 
+    /// A failed load isn't kept: choosing that Look In again tries again.
     private func loadPeople(for scope: SearchFilters.Scope) async {
         people = peopleByScope[scope] ?? []
-        guard peopleByScope[scope] == nil else { return }
-        let found = orderedPeople((try? await session.people(in: SearchFilters(scope: scope).visibility)) ?? [])
+        guard peopleByScope[scope] == nil,
+              let found = try? await session.people(in: SearchFilters(scope: scope).visibility)
+        else { return }
         guard !Task.isCancelled, filters.scope == scope else { return }
-        peopleByScope[scope] = found
-        people = found
+        peopleByScope[scope] = orderedPeople(found)
+        people = orderedPeople(found)
     }
 
     /// Leaving Hidden (or it locking): its people go, and so does any filter on someone seen
