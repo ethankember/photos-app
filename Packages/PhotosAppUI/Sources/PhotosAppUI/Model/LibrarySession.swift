@@ -69,6 +69,13 @@ public final class LibrarySession {
     /// Download All Thumbnails and Keep Offline (LibrarySession+Offline).
     let offlineWork = OfflineWork()
     @ObservationIgnored var albumSyncRunning = false
+    /// People found in the Hidden album's photos while it was unlocked: their face pictures are
+    /// forgotten with the Hidden album's media.
+    @ObservationIgnored var hiddenPeopleIDs: Set<String> = []
+    /// The Archive's people, briefly kept (finding them reads every archived photo).
+    @ObservationIgnored var archivePeople: (version: Int, at: Date, people: [CloudPerson])?
+    /// People › Show People from Hidden unlocked the Hidden album: leaving People locks it again.
+    @ObservationIgnored var peopleScreenUnlockedHidden = false
 
     public private(set) var timeline = TimelineSnapshot()
     public private(set) var syncStatus: SyncStatus = .idle
@@ -555,6 +562,11 @@ public final class LibrarySession {
     /// Deletes cached thumbnails, previews and originals of Hidden items (and the Hidden
     /// items in Recently Deleted), so nothing of them stays on disk while it's locked.
     func forgetHiddenMedia() async {
+        let faces = paths.mediaCache.appending(path: "people", directoryHint: .isDirectory)
+        for personID in hiddenPeopleIDs {
+            try? FileManager.default.removeItem(at: faces.appending(path: personID + ".jpg"))
+        }
+        hiddenPeopleIDs = []
         let me = account.userID
         let ids = (try? await database.reader.read { db in
             try String.fetchAll(db, sql: """

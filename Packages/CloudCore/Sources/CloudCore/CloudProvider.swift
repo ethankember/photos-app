@@ -115,6 +115,9 @@ public protocol CloudConnection: Sendable {
     func updatePerson(id: String, name: String?, birthDate: String?) async throws -> CloudPerson
     /// The person's face picture.
     func personThumbnailRequest(personID: String) -> URLRequest
+    /// The people in the photos with one visibility (Archive, or Hidden while it's unlocked),
+    /// listed like `people()`; that list only counts the Library.
+    func people(in visibility: CloudVisibility) async throws -> [CloudPerson]
     /// One person as the server has them now (after a rename or a merge).
     func person(id: String) async throws -> CloudPerson
     /// Merges the people into the first: their faces move to it, and it keeps its name and

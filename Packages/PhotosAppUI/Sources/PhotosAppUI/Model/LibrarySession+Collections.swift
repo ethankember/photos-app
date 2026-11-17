@@ -60,6 +60,43 @@ extension LibrarySession {
         return TimelineItem.mergedOldestFirst(lists)
     }
 
+    /// The people in one part of the library: the Library's from `/people`; the Archive's and the
+    /// Hidden album's (unlocked) from their photos, since `/people` only counts the Library.
+    func people(in visibility: CloudVisibility) async throws -> [CloudPerson] {
+        try requireSearchable(visibility)
+        switch visibility {
+        case .timeline:
+            return try await people()
+        case .archive:
+            if let kept = archivePeople, kept.version == peopleVersion, Date.now.timeIntervalSince(kept.at) < 300 {
+                return kept.people
+            }
+            let found = try await connected().people(in: .archive)
+            archivePeople = (peopleVersion, .now, found)
+            return found
+        case .locked:
+            let found = try await connected().people(in: .locked)
+            hiddenPeopleIDs.formUnion(found.map(\.id))
+            return found
+        case .hidden:
+            return []
+        }
+    }
+
+    /// Everyone for the People lists: the Library's, then (when asked) people seen only in the
+    /// Archive. The Archive's are optional: if finding them fails, the Library's still show.
+    func listedPeople(includingArchive: Bool = UserDefaults.standard.bool(forKey: PhotosSettings.peopleFromArchive)) async throws -> [CloudPerson] {
+        let library = try await people()
+        guard includingArchive, let archive = try? await people(in: .archive) else { return library }
+        return Self.merged([library, archive])
+    }
+
+    /// Several lists of people as one, each person once, in order.
+    static func merged(_ lists: [[CloudPerson]]) -> [CloudPerson] {
+        var seen = Set<String>()
+        return lists.joined().filter { seen.insert($0.id).inserted }
+    }
+
     /// One person as the server has them now (after a rename or a merge).
     func person(id: String) async throws -> CloudPerson {
         try await connected().person(id: id)

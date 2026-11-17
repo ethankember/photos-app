@@ -122,6 +122,7 @@ private final class FakeConnection: CloudConnection, @unchecked Sendable {
     func updatePerson(id: String, name: String?, birthDate: String?) async throws -> CloudPerson { throw unused() }
     func personThumbnailRequest(personID: String) -> URLRequest { URLRequest(url: URL(string: "x:")!) }
     func person(id: String) async throws -> CloudPerson { throw unused() }
+    func people(in visibility: CloudVisibility) async throws -> [CloudPerson] { throw unused() }
     func mergePeople(_ ids: [String]) async throws -> [String] { throw unused() }
     func faces(inAsset assetID: String) async throws -> [CloudFace] { throw unused() }
     func removeFace(id: String) async throws { throw unused() }

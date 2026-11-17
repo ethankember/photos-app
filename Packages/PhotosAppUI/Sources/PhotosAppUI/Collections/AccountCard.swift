@@ -16,6 +16,8 @@ enum PhotosSettings {
     static let showFeatured = "collections.showFeatured"
     static let showHolidays = "collections.showHolidays"
     static let showTileStatus = "grid.showTileStatus"
+    /// People lists (Collections, People, merging) also show people seen only in the Archive.
+    static let peopleFromArchive = "people.fromArchive"
 
     /// Defaults: on, except ratings and Sync Immediately.
     static func registerDefaults() {

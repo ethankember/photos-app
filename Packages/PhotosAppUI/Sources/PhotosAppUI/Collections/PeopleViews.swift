@@ -68,13 +68,26 @@ struct PeopleRow: View {
     }
 }
 
-/// People › : everyone, three to a row.
+/// People › : everyone, three to a row. ··· › Show People from Archive (remembered; also in Collections) adds
+/// people seen only in archived photos, and Show People from Hidden (Face ID, this visit only)
+/// those seen only in the Hidden album: Immich's people list only counts the Library.
 struct PeopleScreen: View {
     let session: LibrarySession
     let initial: [CloudPerson]?
     let bottomInset: CGFloat
     @State private var people: [CloudPerson]?
     @State private var error: String?
+    @AppStorage(PhotosSettings.peopleFromArchive) private var fromArchive = false
+    @State private var fromHidden = false
+    @State private var alert: String?
+
+    private var vault: HiddenVault { session.hiddenVault }
+
+    private struct LoadKey: Hashable {
+        var version: Int
+        var archive: Bool
+        var hidden: Bool
+    }
 
     var body: some View {
         ScrollView {
@@ -105,9 +118,74 @@ struct PeopleScreen: View {
         }
         .navigationTitle("People")
         .navigationBarTitleDisplayMode(.large)
-        .task(id: session.peopleVersion) {
-            if people == nil { people = initial }
-            do { people = try await session.people() } catch { if people == nil { self.error = (error as? CloudError)?.message ?? error.localizedDescription } }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Toggle(isOn: $fromArchive) { Label("Show People from Archive", systemImage: "archivebox") }
+                    Toggle(isOn: Binding(get: { fromHidden }, set: { setFromHidden($0) })) {
+                        Label("Show People from Hidden", systemImage: "eye.slash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .accessibilityLabel("More")
+            }
+        }
+        .alert(alert ?? "", isPresented: Binding(get: { alert != nil }, set: { if !$0 { alert = nil } })) {
+            Button("OK", role: .cancel) {}
+        }
+        .task(id: LoadKey(version: session.peopleVersion, archive: fromArchive, hidden: fromHidden)) {
+            await load()
+        }
+        // Hidden locks when the app goes to the background (or on leaving People): its people go too.
+        .onChange(of: vault.state) { _, state in
+            if state != .unlocked { fromHidden = false }
+        }
+    }
+
+    private func load() async {
+        if people == nil { people = initial }
+        do {
+            var lists = [try await session.listedPeople(includingArchive: fromArchive)]
+            if fromHidden, vault.state == .unlocked {
+                lists.append(try await session.people(in: .locked))
+            }
+            guard !Task.isCancelled else { return }
+            people = LibrarySession.merged(lists)
+            error = nil
+        } catch {
+            guard !Task.isCancelled else { return }
+            if people == nil { self.error = (error as? CloudError)?.message ?? error.localizedDescription }
+        }
+    }
+
+    /// Hidden needs the Hidden album unlocked (Face ID, with its PIN already on this iPhone).
+    /// Collections locks it again when People closes (not when a person opens from here).
+    private func setFromHidden(_ show: Bool) {
+        guard show else {
+            fromHidden = false
+            if session.peopleScreenUnlockedHidden {
+                session.peopleScreenUnlockedHidden = false
+                Task { await vault.lock() }
+            }
+            return
+        }
+        guard vault.state != .unlocked else {
+            fromHidden = true
+            return
+        }
+        guard vault.hasStoredPin else {
+            alert = String(localized: "Open Hidden in Albums first to set it up on this iPhone.")
+            return
+        }
+        Task {
+            if await vault.unlock() {
+                session.peopleScreenUnlockedHidden = true
+                fromHidden = true
+            } else {
+                alert = vault.errorMessage ?? String(localized: "The Hidden album is still locked.")
+                await vault.lock()
+            }
         }
     }
 }
@@ -130,6 +208,9 @@ struct PersonScreen: View {
     @State private var merging = false
     @State private var alert: String?
     @State private var reload = 0
+    /// Someone seen only in the Archive or Hidden has no Library photos: the page turns those on
+    /// by itself, once each (Hidden only when it's already unlocked; it never asks for Face ID).
+    @State private var widened: Set<CloudVisibility> = []
 
     private var vault: HiddenVault { session.hiddenVault }
 
@@ -203,6 +284,16 @@ struct PersonScreen: View {
         do {
             let loaded = try await session.personItems(person.id, in: visibilities)
             guard !Task.isCancelled else { return }
+            if loaded.isEmpty, !showsArchived, !widened.contains(.archive) {
+                widened.insert(.archive)
+                showsArchived = true
+                return
+            }
+            if loaded.isEmpty, !showsHidden, vault.state == .unlocked, !widened.contains(.locked) {
+                widened.insert(.locked)
+                showsHidden = true
+                return
+            }
             items = loaded
             error = nil
         } catch {
@@ -398,7 +489,7 @@ struct MergePeopleSheet: View {
 
     private func loadPeople() async {
         do {
-            people = try await session.people()
+            people = try await session.listedPeople()
         } catch {
             people = []
             self.error = (error as? CloudError)?.message ?? error.localizedDescription

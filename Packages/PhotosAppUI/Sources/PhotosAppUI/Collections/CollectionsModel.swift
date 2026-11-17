@@ -185,7 +185,7 @@ final class CollectionsModel {
             albums = ownedAlbums.filter { !$0.isShared }.sorted { ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast) }
             self.sharedAlbums = sharedAlbums.sorted { ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast) }
             self.memories = (try? await memories) ?? []
-            people = (try? await session.people()) ?? people ?? []
+            people = (try? await session.listedPeople()) ?? people ?? []
             loadError = nil
         } catch {
             lastLoad = nil

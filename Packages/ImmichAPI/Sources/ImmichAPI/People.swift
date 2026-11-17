@@ -63,6 +63,59 @@ extension Client {
         }
     }
 
+    /// The people in the photos with one visibility (the Archive, or the Hidden album while it's
+    /// unlocked): `/people` only counts faces in the Library, so someone seen only there is
+    /// missing from it. A metadata search with people, every page; see `peopleFound`.
+    public func people(in visibility: CloudVisibility, minimumPhotos: Int = Client.minimumPhotosForUnnamed) async throws -> [CloudPerson] {
+        var perAsset: [[Components.Schemas.PersonResponseDto]] = []
+        var page = 1
+        do {
+            // Every page (a cap would drop people without saying); the guard only stops a runaway.
+            while page <= 2000 {
+                switch try await searchAssets(body: .json(Self.peopleScanDto(visibility, page: page))) {
+                case .ok(let response):
+                    let assets = try response.body.json.assets
+                    perAsset += assets.items.map { $0.people ?? [] }
+                    guard assets.nextPage != nil, !assets.items.isEmpty else { return Self.peopleFound(perAsset, minimumPhotos: minimumPhotos) }
+                    page += 1
+                case .undocumented(let status, let payload):
+                    throw await APIError.from(statusCode: status, payload: payload, operation: "find the people in these photos")
+                }
+            }
+            return Self.peopleFound(perAsset, minimumPhotos: minimumPhotos)
+        } catch {
+            throw APIError.wrap(error, operation: "People")
+        }
+    }
+
+    /// One page of photos with this visibility, with the people in each.
+    static func peopleScanDto(_ visibility: CloudVisibility, page: Int) -> Components.Schemas.MetadataSearchDto {
+        var query = CloudSearchQuery()
+        query.visibility = visibility
+        var dto = query.metadataSearchDto(page: page, size: 250)
+        dto.withPeople = true
+        return dto
+    }
+
+    /// Immich's default for listing unnamed people (its "minimum recognised faces" setting is 3).
+    public static let minimumPhotosForUnnamed = 3
+
+    /// Each person once, from the people in each photo, the way `/people` lists them: hidden
+    /// people left out, and unnamed people only when they're in at least `minimumPhotos` photos.
+    /// Most photographed first, then by name.
+    static func peopleFound(_ perAsset: [[Components.Schemas.PersonResponseDto]], minimumPhotos: Int) -> [CloudPerson] {
+        var counts: [String: Int] = [:]
+        var first: [String: Components.Schemas.PersonResponseDto] = [:]
+        for people in perAsset {
+            for person in Set(people.map(\.id)) { counts[person, default: 0] += 1 }
+            for person in people where first[person.id] == nil { first[person.id] = person }
+        }
+        return first.values
+            .filter { !$0.isHidden && (!$0.name.isEmpty || counts[$0.id, default: 0] >= minimumPhotos) }
+            .sorted { (counts[$0.id, default: 0], $1.name, $1.id) > (counts[$1.id, default: 0], $0.name, $0.id) }
+            .map(CloudPerson.init)
+    }
+
     /// One person as the server has them now.
     public func person(id: String) async throws -> CloudPerson {
         do {

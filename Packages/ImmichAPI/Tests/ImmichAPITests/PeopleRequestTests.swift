@@ -28,6 +28,32 @@ import Testing
         #expect(Client.unmergedIDs([], requested: ["kept", "other"]) == ["kept", "other"])
     }
 
+    @Test func peopleScanNamesTheVisibilityAndAsksForPeople() throws {
+        let body = try json(Client.peopleScanDto(.locked, page: 3))
+        #expect(body["visibility"] as? String == "locked")
+        #expect(body["withPeople"] as? Bool == true)
+        #expect(body["page"] as? Int == 3)
+        #expect(body["size"] as? Int == 250)
+    }
+
+    private func person(_ id: String, _ name: String, hidden: Bool = false) -> Components.Schemas.PersonResponseDto {
+        .init(id: id, isHidden: hidden, name: name, otherPeople: [], sharedBy: [], sharedWith: [], thumbnailPath: "")
+    }
+
+    @Test func peopleFoundFollowsThePeopleListRules() {
+        let ann = person("ann", "Ann"), bob = person("bob", "Bob"), stranger = person("x", ""), regular = person("y", "")
+        let secret = person("z", "Zed", hidden: true)
+        let photos: [[Components.Schemas.PersonResponseDto]] = [
+            [ann, stranger, regular], [ann, regular, ann], [regular, secret], [bob], [],
+        ]
+        let found = Client.peopleFound(photos, minimumPhotos: 3)
+        // Unnamed "x" is in one photo (left out), "y" in three; hidden Zed is left out.
+        // Most photographed first: y (3), Ann (2, counted once per photo), Bob (1).
+        #expect(found.map(\.id) == ["y", "ann", "bob"])
+        // With no minimum, the one-photo stranger is listed too (ties by name: unnamed first).
+        #expect(Client.peopleFound(photos, minimumPhotos: 1).map(\.id) == ["y", "ann", "x", "bob"])
+    }
+
     @Test func personSearchSendsPeopleWithAVisibility() throws {
         var query = CloudSearchQuery()
         query.personIDs = ["person-1", "person-2"]

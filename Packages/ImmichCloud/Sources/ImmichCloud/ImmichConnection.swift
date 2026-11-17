@@ -46,6 +46,7 @@ struct ImmichConnection: CloudConnection {
     func people() async throws -> [CloudPerson] { try await client.people() }
     func people(inAsset assetID: String) async throws -> [CloudPerson] { try await client.people(inAsset: assetID) }
     func person(id: String) async throws -> CloudPerson { try await client.person(id: id) }
+    func people(in visibility: CloudVisibility) async throws -> [CloudPerson] { try await client.people(in: visibility) }
     func mergePeople(_ ids: [String]) async throws -> [String] { try await client.mergePeople(ids: ids) }
     func faces(inAsset assetID: String) async throws -> [CloudFace] { try await client.faces(inAsset: assetID) }
     func removeFace(id: String) async throws { try await client.removeFace(id: id) }

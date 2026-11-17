@@ -12,7 +12,9 @@ import SwiftUI
 /// Filter chips above the field narrow it to the Library, Archive or Hidden album (which has to
 /// be unlocked), photos or videos, or one album, and choose what the text matches: everything,
 /// the file name, or text in the photo (the server's OCR). Tapping a face (People on Home, or
-/// people whose name matches what's typed) adds that person as a filter too.
+/// people whose name matches what's typed) adds that person as a filter too. The people offered
+/// follow Look In: the Archive's and the Hidden album's come from their photos, since Immich's
+/// people list only counts the Library.
 struct SearchScreen: View {
     let session: LibrarySession
     @Bindable var ui: LibraryUIState
@@ -26,7 +28,9 @@ struct SearchScreen: View {
     @State private var serverMessage: String?
     /// A short note above the chips (e.g. the Hidden album couldn't be unlocked).
     @State private var notice: String?
+    /// The people in the part of the library Look In is on.
     @State private var people: [CloudPerson] = []
+    @State private var peopleByScope: [SearchFilters.Scope: [CloudPerson]] = [:]
     /// The user's albums and those shared with them; nil until loaded (or offline).
     @State private var albums: [CloudAlbum]?
     @State private var serverItemsCache: [ServerItemsKey: [TimelineItem]] = [:]
@@ -123,9 +127,9 @@ struct SearchScreen: View {
             let places = await session.topPlaces(limit: 2)
             let year = Calendar.current.component(.year, from: .now)
             suggestions = places.map { String(localized: "\($0)") } + [String(localized: "Videos in \(String(year))"), String(localized: "Favourites")]
-            people = orderedPeople((try? await session.people()) ?? [])
         }
         .task { await loadAlbums() }
+        .task(id: filters.scope) { await loadPeople(for: filters.scope) }
         .task(id: SearchKey(text: text, filters: filters)) {
             await runSearch(SearchKey(text: text, filters: filters))
         }
@@ -133,6 +137,7 @@ struct SearchScreen: View {
         .onChange(of: session.hiddenVault.state) { _, state in
             guard state != .unlocked else { return }
             serverItemsCache = serverItemsCache.filter { $0.key.visibility != .locked }
+            forgetHiddenPeople()
             if filters.scope == .hidden {
                 results = []
                 serverResults = []
@@ -246,6 +251,25 @@ struct SearchScreen: View {
         }
     }
 
+    private func loadPeople(for scope: SearchFilters.Scope) async {
+        people = peopleByScope[scope] ?? []
+        guard peopleByScope[scope] == nil else { return }
+        let found = orderedPeople((try? await session.people(in: SearchFilters(scope: scope).visibility)) ?? [])
+        guard !Task.isCancelled, filters.scope == scope else { return }
+        peopleByScope[scope] = found
+        people = found
+    }
+
+    /// Leaving Hidden (or it locking): its people go, and so does any filter on someone seen
+    /// only there, so their name isn't left on a chip.
+    private func forgetHiddenPeople() {
+        guard let hidden = peopleByScope[.hidden] else { return }
+        let elsewhere = Set(((peopleByScope[.library] ?? []) + (peopleByScope[.archive] ?? [])).map(\.id))
+        let hiddenOnly = Set(hidden.map(\.id)).subtracting(elsewhere)
+        filters.people.removeAll { hiddenOnly.contains($0.id) }
+        peopleByScope[.hidden] = nil
+    }
+
     private func loadAlbums() async {
         var loaded: [CloudAlbum] = []
         var failures = 0
@@ -269,7 +293,10 @@ struct SearchScreen: View {
         guard scope == .hidden else {
             let wasHidden = filters.scope == .hidden
             filters.scope = scope
-            if wasHidden { Task { await session.hiddenVault.lock() } }
+            if wasHidden {
+                forgetHiddenPeople()
+                Task { await session.hiddenVault.lock() }
+            }
             return
         }
         let vault = session.hiddenVault
@@ -455,6 +482,10 @@ struct SearchScreen: View {
         return VStack(alignment: .leading, spacing: 8) {
             if !matchingPeople.isEmpty {
                 peopleStrip(matchingPeople)
+                    .padding(.top, 12)
+            } else if trimmedText.isEmpty, !people.isEmpty {
+                // Home (with People) isn't shown here: the people of what's being browsed.
+                peopleStrip(Array(people.prefix(30)))
                     .padding(.top, 12)
             }
             HStack(spacing: 8) {

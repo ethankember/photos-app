@@ -31,7 +31,14 @@ struct CollectionsScreen: View {
     @State private var showsReorder = false
     @State private var showsPinnedEditor = false
     @State private var showsPausedAlert = false
+    @AppStorage(PhotosSettings.peopleFromArchive) private var peopleFromArchive = false
     @Environment(\.scenePhase) private var scenePhase
+
+    private func lockHiddenOpenedForPeople() {
+        guard session.peopleScreenUnlockedHidden else { return }
+        session.peopleScreenUnlockedHidden = false
+        Task { await session.hiddenVault.lock() }
+    }
 
     private var myUserID: String { session.account.userID }
 
@@ -64,14 +71,23 @@ struct CollectionsScreen: View {
         .task(id: "\(model.isSyncPaused) \(session.connection != nil)") {
             await collections.load(from: session, force: session.connection != nil && !model.isSyncPaused)
         }
-        // After a merge, so merged people don't linger in People.
+        // After a merge, so merged people don't linger in People; and for People › Show People
+        // from Archive, which this row follows too.
         .onChange(of: session.peopleVersion) {
             Task { await collections.load(from: session, force: true) }
+        }
+        .onChange(of: peopleFromArchive) {
+            Task { await collections.load(from: session, force: true) }
+        }
+        // People › Show People from Hidden keeps the Hidden album open while People is open,
+        // person pages included: back here (or another section) locks it again.
+        .onChange(of: path) {
+            if path.isEmpty { lockHiddenOpenedForPeople() }
         }
         // Albums, memories and people change on the server (face recognition finds people
         // over hours), so they're fetched again on coming back here (at most once a minute).
         .onChange(of: ui.section) { _, section in
-            if section == .collections { Task { await collections.load(from: session) } }
+            if section == .collections { Task { await collections.load(from: session) } } else { lockHiddenOpenedForPeople() }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active, ui.section == .collections { Task { await collections.load(from: session) } }
