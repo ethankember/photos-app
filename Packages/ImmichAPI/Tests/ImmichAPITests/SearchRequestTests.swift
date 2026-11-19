@@ -56,6 +56,20 @@ import Testing
         #expect(body["size"] as? Int == 100)
     }
 
+    @Test func laterPagesAskForTheNextPage() throws {
+        var query = CloudSearchQuery()
+        query.visibility = .timeline
+        let smart = try json(query.smartSearchDto(query: "dog", page: 2, size: Client.smartSearchPageSize))
+        #expect(smart["page"] as? Int == 2)
+        #expect(smart["size"] as? Int == 100)
+        #expect(smart["visibility"] as? String == "timeline")
+        query.text = "receipt"
+        let metadata = try json(query.metadataSearchDto(page: 3, size: Client.metadataSearchPageSize))
+        #expect(metadata["page"] as? Int == 3)
+        #expect(metadata["size"] as? Int == 250)
+        #expect(metadata["ocr"] as? String == "receipt")
+    }
+
     @Test func unsetFiltersAreLeftOut() throws {
         let body = try json(CloudSearchQuery().smartSearchDto(query: "x", page: 1, size: 100))
         #expect(Set(body.keys) == ["query", "page", "size"])

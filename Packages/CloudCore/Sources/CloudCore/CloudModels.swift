@@ -138,6 +138,17 @@ public struct CloudPerson: Sendable, Hashable, Identifiable {
     }
 }
 
+/// One page of search results, and whether the server has more after it.
+public struct CloudAssetPage: Sendable {
+    public let assets: [CloudAsset]
+    public let hasMore: Bool
+
+    public init(assets: [CloudAsset], hasMore: Bool) {
+        self.assets = assets
+        self.hasMore = hasMore
+    }
+}
+
 /// A face the server's face recognition found in a photo.
 public struct CloudFace: Sendable, Hashable, Identifiable {
     public let id: String

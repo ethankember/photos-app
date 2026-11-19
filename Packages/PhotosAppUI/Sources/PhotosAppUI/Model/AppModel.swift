@@ -88,7 +88,7 @@ public final class AppModel {
                         say("first person: \(items.count) photos, face \(face.map { "\(Int($0.size.width))px" } ?? "missing")")
                     }
                 } catch { say("people error \(error)") }
-                do { say("smart search 'car': \(try await session.smartSearch("car", filters: CloudSearchQuery()).count) results") } catch { say("smart search error \(error)") }
+                do { say("smart search 'car': \(try await session.smartSearch("car", filters: CloudSearchQuery(), page: 1).items.count) results") } catch { say("smart search error \(error)") }
                 await session.refreshTrashRetentionDays()
                 say("trash days \(session.trashRetentionDays), trashed items \(await session.trashDates().count)")
                 say("done")

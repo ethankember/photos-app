@@ -107,6 +107,7 @@ private final class FakeConnection: CloudConnection, @unchecked Sendable {
     func stopSharingLibrary(with userID: String) async throws { throw unused() }
     func showSharedLibraryInLibrary(_ shown: Bool, partnerID: String) async throws { throw unused() }
     func search(_ query: CloudSearchQuery, limit: Int) async throws -> [CloudAsset] { throw unused() }
+    func searchPage(_ query: CloudSearchQuery, page: Int) async throws -> CloudAssetPage { throw unused() }
     func createSharedLink(assetIDs: [String], expiresAt: Date?) async throws -> CloudSharedLink { throw unused() }
     func deleteSharedLink(id: String) async throws { throw unused() }
     func temporaryPublicVideoURL(assetID: String, expiresAt: Date) async throws -> CloudSharedLink { throw unused() }
@@ -126,7 +127,7 @@ private final class FakeConnection: CloudConnection, @unchecked Sendable {
     func mergePeople(_ ids: [String]) async throws -> [String] { throw unused() }
     func faces(inAsset assetID: String) async throws -> [CloudFace] { throw unused() }
     func removeFace(id: String) async throws { throw unused() }
-    func smartSearch(_ text: String, filters: CloudSearchQuery, limit: Int) async throws -> [CloudAsset] { throw unused() }
+    func smartSearch(_ text: String, filters: CloudSearchQuery, page: Int) async throws -> CloudAssetPage { throw unused() }
     func trashRetentionDays() async throws -> Int { throw unused() }
 }
 

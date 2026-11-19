@@ -187,28 +187,24 @@ extension Client {
         return ids.filter { !merged.contains($0) }
     }
 
-    /// Search by meaning, narrowed by `filters`, in pages of 100 up to `limit`.
-    public func smartSearch(_ text: String, filters: CloudSearchQuery = CloudSearchQuery(), limit: Int) async throws -> [CloudAsset] {
-        var results: [CloudAsset] = []
-        var page = 1
+    /// Search by meaning, narrowed by `filters`: one page (from 1) of 100, best matches first.
+    /// Immich ranks the whole library (there's no cut-off), so results are fetched page by page
+    /// as they're scrolled to; `hasMore` is the server's `nextPage`.
+    public func smartSearch(_ text: String, filters: CloudSearchQuery = CloudSearchQuery(), page: Int) async throws -> CloudAssetPage {
         do {
-            while results.count < limit {
-                let dto = filters.smartSearchDto(query: text, page: page, size: 100)
-                switch try await searchSmart(body: .json(dto)) {
-                case .ok(let response):
-                    let assets = try response.body.json.assets
-                    results += assets.items.map(CloudAsset.init)
-                    guard assets.nextPage != nil, !assets.items.isEmpty else { return results }
-                    page += 1
-                case .undocumented(let status, let payload):
-                    throw await APIError.from(statusCode: status, payload: payload, operation: "search")
-                }
+            switch try await searchSmart(body: .json(filters.smartSearchDto(query: text, page: page, size: Self.smartSearchPageSize))) {
+            case .ok(let response):
+                let assets = try response.body.json.assets
+                return CloudAssetPage(assets: assets.items.map(CloudAsset.init), hasMore: assets.nextPage != nil && !assets.items.isEmpty)
+            case .undocumented(let status, let payload):
+                throw await APIError.from(statusCode: status, payload: payload, operation: "search")
             }
-            return results
         } catch {
             throw APIError.wrap(error, operation: "Smart search")
         }
     }
+
+    static let smartSearchPageSize = 100
 
     /// How many days the server keeps trashed items.
     public func trashRetentionDays() async throws -> Int {

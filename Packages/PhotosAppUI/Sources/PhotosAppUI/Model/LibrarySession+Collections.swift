@@ -127,14 +127,23 @@ extension LibrarySession {
         for face in faces { try await connection.removeFace(id: face.id) }
     }
 
-    /// Photos matching a description, best matches first, narrowed by `filters`.
-    func smartSearch(_ text: String, filters: CloudSearchQuery) async throws -> [TimelineItem] {
+    /// One page (from 1) of photos matching a description, best matches first, narrowed by `filters`.
+    func smartSearch(_ text: String, filters: CloudSearchQuery, page: Int) async throws -> (items: [TimelineItem], hasMore: Bool) {
         try requireSearchable(filters.visibility)
-        return try await connected().smartSearch(text, filters: filters, limit: 300).map(TimelineItem.init)
+        let found = try await connected().smartSearch(text, filters: filters, page: page)
+        return (found.assets.map(TimelineItem.init), found.hasMore)
     }
 
-    /// The server's metadata search (file names, text in photos, albums), newest first.
-    func serverSearch(_ query: CloudSearchQuery, limit: Int = 1000) async throws -> [TimelineItem] {
+    /// One page (from 1) of the server's metadata search (file names, text in photos), newest first.
+    func serverSearch(_ query: CloudSearchQuery, page: Int) async throws -> (items: [TimelineItem], hasMore: Bool) {
+        try requireSearchable(query.visibility)
+        let found = try await connected().searchPage(query, page: page)
+        return (found.assets.map(TimelineItem.init), found.hasMore)
+    }
+
+    /// The server's metadata search, newest first, up to `limit` (whole lists: an album's or a
+    /// person's items for a filter).
+    func serverSearch(_ query: CloudSearchQuery, limit: Int) async throws -> [TimelineItem] {
         try requireSearchable(query.visibility)
         return try await connected().search(query, limit: limit).map(TimelineItem.init)
     }

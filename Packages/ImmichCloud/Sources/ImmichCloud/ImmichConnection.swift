@@ -56,8 +56,8 @@ struct ImmichConnection: CloudConnection {
     func personThumbnailRequest(personID: String) -> URLRequest {
         MediaEndpoints.request(MediaEndpoints.personThumbnail(server: server.url, personID: personID), token: token)
     }
-    func smartSearch(_ text: String, filters: CloudSearchQuery, limit: Int) async throws -> [CloudAsset] {
-        try await client.smartSearch(text, filters: filters, limit: limit)
+    func smartSearch(_ text: String, filters: CloudSearchQuery, page: Int) async throws -> CloudAssetPage {
+        try await client.smartSearch(text, filters: filters, page: page)
     }
     func trashRetentionDays() async throws -> Int { try await client.trashRetentionDays() }
 
@@ -107,6 +107,7 @@ struct ImmichConnection: CloudConnection {
         try await client.setPartnerInTimeline(shown, partnerID: partnerID)
     }
     func search(_ query: CloudSearchQuery, limit: Int) async throws -> [CloudAsset] { try await client.searchAssets(query, limit: limit) }
+    func searchPage(_ query: CloudSearchQuery, page: Int) async throws -> CloudAssetPage { try await client.searchAssetsPage(query, page: page) }
 
     func createSharedLink(assetIDs: [String], expiresAt: Date?) async throws -> CloudSharedLink {
         let link = try await client.createSharedLink(assetIDs: assetIDs, expiresAt: expiresAt)

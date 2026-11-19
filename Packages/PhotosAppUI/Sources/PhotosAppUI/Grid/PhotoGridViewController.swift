@@ -21,6 +21,16 @@ final class PhotoGridViewController: UIViewController {
     static let previewThresholdPixels: CGFloat = 330
 
     var onColumnsChanged: ((Int) -> Void)?
+    /// Search results: the grid opens at the top (best matches first) and never follows the
+    /// bottom, unlike the Library, which opens at its newest photos.
+    var opensAtTop = false
+    /// With `opensAtTop`: a new value (a new search) goes back to the top; items added under
+    /// the same one (more results) keep the place.
+    var resetKey: AnyHashable?
+    private var appliedResetKey: AnyHashable?
+    /// Called while the last screens of items are in view, after scrolling or a layout (a first
+    /// batch shorter than the screen can't be scrolled): time to fetch more.
+    var onNearEnd: (() -> Void)?
     /// Scrolling reports for the Library header and bar: visible dates, whether the
     /// user is touching or moving the grid, whether it's at the newest photos, and
     /// whether the user scrolled (which morphs the bottom bar).
@@ -178,7 +188,7 @@ final class PhotoGridViewController: UIViewController {
         collectionView.verticalScrollIndicatorInsets = collectionView.contentInset
         scrubberTop?.constant = contentInsets.top + 4
         scrubberBottom?.constant = -contentInsets.bottom - 4
-        if wasAtBottom, didInitialScroll { scrollToBottom() }
+        if wasAtBottom, didInitialScroll, !opensAtTop { scrollToBottom() }
     }
 
     /// Select mode › Share: opens the share screen at the first selected item, which
@@ -248,7 +258,7 @@ final class PhotoGridViewController: UIViewController {
             collectionView.layoutIfNeeded()
             if collectionView.contentSize.height > 0 {
                 didInitialScroll = true
-                scrollToBottom()
+                if opensAtTop { scrollToTop() } else { scrollToBottom() }
                 if onScrollInfo != nil {
                     LaunchTiming.firstGridShown(items: items.count)
                     LaunchTiming.checkPosition { [weak self] in self?.isNearBottom ?? false }
@@ -280,9 +290,12 @@ final class PhotoGridViewController: UIViewController {
             return
         }
         version = newVersion
+        // Noted even before the view loads, or the first page added later would count as a new search.
+        let isNewSearch = opensAtTop && didInitialScroll && resetKey != appliedResetKey
+        appliedResetKey = resetKey
         if let phoneImages {
             // The first screen's phone photos in one lookup (the grid opens at the newest), the rest in the background.
-            let firstScreen = didInitialScroll ? [] : newItems.suffix(300).compactMap(\.localID)
+            let firstScreen = didInitialScroll ? [] : (opensAtTop ? newItems.prefix(300) : newItems.suffix(300)).compactMap(\.localID)
             phoneImages.preload(firstScreen)
             phoneImages.preloadInBackground(newItems.compactMap(\.localID))
         }
@@ -290,8 +303,12 @@ final class PhotoGridViewController: UIViewController {
             items = newItems
             return
         }
-        let wasAtBottom = isNearBottom
+        let wasAtBottom = isNearBottom && !opensAtTop
         let anchor = items.isEmpty ? nil : captureAnchor()
+        // More results added under the same search: what's on screen hasn't moved, and setting
+        // the offset again would stop a scroll that's still gliding.
+        let onlyGrewBelow = opensAtTop && !isNewSearch && !items.isEmpty && newItems.count >= items.count
+            && newItems[0].id == items[0].id && newItems[items.count - 1].id == items[items.count - 1].id
         if !didInitialScroll, onScrollInfo != nil { LaunchTiming.mark("apply") }
         items = newItems
         gridLayout.setAspectRatios(newItems.map(\.aspectRatio))
@@ -302,14 +319,16 @@ final class PhotoGridViewController: UIViewController {
         if !didInitialScroll || wasAtBottom {
             if !items.isEmpty, collectionView.bounds.height > 0 {
                 didInitialScroll = true
-                scrollToBottom()
+                if opensAtTop { scrollToTop() } else { scrollToBottom() }
                 if onScrollInfo != nil {
                     LaunchTiming.mark("scrolled")
                     collectionView.layoutIfNeeded()
                     LaunchTiming.firstGridShown(items: items.count)
                 }
             }
-        } else {
+        } else if isNewSearch {
+            scrollToTop()
+        } else if !onlyGrewBelow {
             restore(anchor)
         }
         reportScroll()
@@ -320,6 +339,10 @@ final class PhotoGridViewController: UIViewController {
         let insets = collectionView.adjustedContentInset
         let maxOffset = collectionView.contentSize.height - collectionView.bounds.height + insets.bottom
         return collectionView.contentOffset.y >= maxOffset - max(gridLayout.itemSide, 44)
+    }
+
+    private func scrollToTop() {
+        collectionView.setContentOffset(CGPoint(x: 0, y: -collectionView.adjustedContentInset.top), animated: false)
     }
 
     private func scrollToBottom() {
@@ -372,6 +395,9 @@ final class PhotoGridViewController: UIViewController {
         return Formatting.monthYear(items[index].date)
     }
 
+    /// How close to the end `onNearEnd` fires: about three screens of a three-column grid.
+    private static let nearEndItems = 90
+
     /// Tells the Library header what's on screen (only when something changed).
     private func reportScroll(userScrolled: Bool = false) {
         guard isViewLoaded, collectionView.bounds.height > 0 else { return }
@@ -380,6 +406,9 @@ final class PhotoGridViewController: UIViewController {
             minY: offset + contentInsets.top,
             maxY: offset + collectionView.bounds.height - contentInsets.bottom
         ).clamped(to: 0..<items.count)
+        if let onNearEnd, !visible.isEmpty, visible.upperBound >= items.count - Self.nearEndItems {
+            onNearEnd()
+        }
         var range: ClosedRange<Date>?
         if !visible.isEmpty {
             var low = items[visible.lowerBound].date, high = low

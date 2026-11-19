@@ -24,6 +24,11 @@ struct SearchScreen: View {
     /// Matches from the server (by meaning, file name or text in the photo), after the local ones.
     @State private var serverResults: [TimelineItem] = []
     @State private var isServerSearching = false
+    /// The server's results come a page at a time as they're scrolled to (smart search ranks the
+    /// whole library, so there's no natural end): the last page read and whether there are more.
+    @State private var serverPage = 0
+    @State private var serverHasMore = false
+    @State private var isLoadingMore = false
     /// Why the server couldn't search (offline, text recognition off, Hidden locked).
     @State private var serverMessage: String?
     /// A short note above the chips (e.g. the Hidden album couldn't be unlocked).
@@ -141,6 +146,7 @@ struct SearchScreen: View {
             if filters.scope == .hidden {
                 results = []
                 serverResults = []
+                serverHasMore = false
                 filters.scope = .library
             }
         }
@@ -155,6 +161,8 @@ struct SearchScreen: View {
     private func runSearch(_ key: SearchKey) async {
         let trimmed = key.text.trimmingCharacters(in: .whitespaces)
         let filters = key.filters
+        serverHasMore = false
+        serverPage = 0
         guard !trimmed.isEmpty || filters.listsWithoutText else {
             results = []
             serverResults = []
@@ -203,25 +211,53 @@ struct SearchScreen: View {
         guard !Task.isCancelled else { return }
         isServerSearching = true
         defer { isServerSearching = false }
-        var query = filters.cloudQuery
         do {
-            let found: [TimelineItem]
-            switch filters.field {
-            case .anything:
-                found = try await session.smartSearch(trimmed, filters: query)
-            case .fileName:
-                query.fileName = trimmed
-                found = try await session.serverSearch(query)
-            case .text:
-                query.text = trimmed
-                found = try await session.serverSearch(query)
-            }
+            let first = try await fetchServerPage(trimmed, filters: filters, page: 1)
             guard !Task.isCancelled else { return }
-            serverResults = found
+            serverResults = first.items
+            serverPage = 1
+            serverHasMore = first.hasMore
         } catch {
             // Smart search is optional (the server may have no machine learning); the others aren't.
             guard !Task.isCancelled, filters.field == .text else { return }
             serverMessage = Self.message(for: error)
+        }
+    }
+
+    /// One page of the server's results for this search: by meaning, file name or text in the photo.
+    private func fetchServerPage(_ text: String, filters: SearchFilters, page: Int) async throws -> (items: [TimelineItem], hasMore: Bool) {
+        var query = filters.cloudQuery
+        switch filters.field {
+        case .anything:
+            return try await session.smartSearch(text, filters: query, page: page)
+        case .fileName:
+            query.fileName = text
+            return try await session.serverSearch(query, page: page)
+        case .text:
+            query.text = text
+            return try await session.serverSearch(query, page: page)
+        }
+    }
+
+    /// The grid is near its end: the next page of the server's results, one at a time. It runs
+    /// outside the search's task, so a page for a search that's since changed (text, filters,
+    /// Hidden locking) is dropped.
+    private func loadMore() async {
+        let live = SearchKey(text: text, filters: filters)
+        guard serverHasMore, !isLoadingMore, !isServerSearching, let key = searchedKey, key == live else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+        let next = serverPage + 1
+        do {
+            let page = try await fetchServerPage(key.text.trimmingCharacters(in: .whitespaces), filters: key.filters, page: next)
+            guard SearchKey(text: text, filters: filters) == key, searchedKey == key, serverPage == next - 1 else { return }
+            let known = Set(serverResults.map(\.id))
+            serverResults += page.items.filter { !known.contains($0.id) }
+            serverPage = next
+            serverHasMore = page.hasMore
+        } catch {
+            // Stop asking for this search; what's listed stays.
+            if searchedKey == key { serverHasMore = false }
         }
     }
 
@@ -491,9 +527,9 @@ struct SearchScreen: View {
                     .padding(.top, 12)
             }
             HStack(spacing: 8) {
-                Text(results.isEmpty ? (isServerSearching ? String(localized: "Searching…") : String(localized: "No Results")) : results.count == 1 ? String(localized: "1 Result") : String(localized: "\(results.count.formatted()) Results"))
+                Text(resultsTitle(count: results.count))
                     .font(.system(size: 22, weight: .bold))
-                if isServerSearching { ProgressView() }
+                if isServerSearching || isLoadingMore { ProgressView() }
             }
             .padding(.horizontal, 20)
             .padding(.top, 12)
@@ -515,11 +551,22 @@ struct SearchScreen: View {
                     snapshot: TimelineSnapshot(items: results, version: (searchedKey?.hashValue ?? 0) &+ serverResults.count, isLoaded: true),
                     // Hidden results open like the Hidden album's (Unhide rather than Hide).
                     session: session, mode: searchedKey?.filters.scope == .hidden ? .hidden : .library, columns: $columns,
-                    insets: UIEdgeInsets(top: 0, left: 0, bottom: barHeight + 32, right: 0)
+                    insets: UIEdgeInsets(top: 0, left: 0, bottom: barHeight + 32, right: 0),
+                    // Best matches first, so from the top; more pages load near the end.
+                    opensAtTop: true,
+                    resetKey: searchedKey.map { AnyHashable($0) },
+                    onNearEnd: { Task { await loadMore() } }
                 )
                 .ignoresSafeArea(edges: .bottom)
             }
         }
+    }
+
+    /// "120 Results", or "120+ Results" while the server has more to show.
+    private func resultsTitle(count: Int) -> String {
+        if count == 0 { return isServerSearching ? String(localized: "Searching…") : String(localized: "No Results") }
+        if serverHasMore { return String(localized: "\(count.formatted())+ Results") }
+        return count == 1 ? String(localized: "1 Result") : String(localized: "\(count.formatted()) Results")
     }
 
     private var emptyHint: String {

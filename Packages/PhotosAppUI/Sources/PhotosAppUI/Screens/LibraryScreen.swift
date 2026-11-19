@@ -202,6 +202,10 @@ struct PhotoGridView: UIViewControllerRepresentable {
     var takesCommands: Bool?
     /// Text centred at the bottom of each tile (Recently Deleted's days left).
     var caption: ((TimelineItem) -> TileCaption?)?
+    /// Search results: open at the top; a new `resetKey` goes back there; `onNearEnd` asks for more.
+    var opensAtTop = false
+    var resetKey: AnyHashable?
+    var onNearEnd: (() -> Void)?
     @AppStorage(PhotosSettings.showTileStatus) private var showsStatus = true
 
     func makeUIViewController(context: Context) -> PhotoGridViewController {
@@ -238,11 +242,16 @@ struct PhotoGridView: UIViewControllerRepresentable {
             }
         }
         controller.contentInsets = insets
+        controller.opensAtTop = opensAtTop
+        controller.resetKey = resetKey
+        controller.onNearEnd = onNearEnd
         controller.apply(items: snapshot.items, version: snapshot.version)
         return controller
     }
 
     func updateUIViewController(_ controller: PhotoGridViewController, context: Context) {
+        controller.resetKey = resetKey
+        controller.onNearEnd = onNearEnd
         controller.apply(items: snapshot.items, version: snapshot.version)
         controller.contentInsets = insets
         controller.showsStatus = showsStatus && mode == .library

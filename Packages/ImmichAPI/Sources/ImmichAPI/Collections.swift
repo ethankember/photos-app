@@ -94,6 +94,24 @@ extension Client {
         }
     }
 
+    /// One page (from 1) of the same metadata search, newest first; `hasMore` is the server's `nextPage`.
+    public func searchAssetsPage(_ query: MetadataQuery, page: Int) async throws -> CloudAssetPage {
+        do {
+            switch try await searchAssets(body: .json(query.metadataSearchDto(page: page, size: Self.metadataSearchPageSize))) {
+            case .ok(let response):
+                let assets = try response.body.json.assets
+                return CloudAssetPage(assets: assets.items.map(RemoteAssetSummary.init), hasMore: assets.nextPage != nil && !assets.items.isEmpty)
+            case .undocumented(let status, let payload):
+                throw await APIError.from(statusCode: status, payload: payload, operation: "search")
+            }
+        } catch {
+            throw APIError.wrap(error, operation: "Search")
+        }
+    }
+
+    /// Small pages keep each request light on the Raspberry Pi.
+    static let metadataSearchPageSize = 250
+
     /// The account's memories (Immich's "On This Day"), newest first.
     public func memories() async throws -> [MemorySummary] {
         do {

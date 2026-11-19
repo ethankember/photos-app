@@ -67,6 +67,8 @@ public protocol CloudConnection: Sendable {
     func removeAssets(_ assetIDs: [String], fromAlbum albumID: String) async throws -> (removed: [String], refused: Int)
     func memories() async throws -> [CloudMemory]
     func search(_ query: CloudSearchQuery, limit: Int) async throws -> [CloudAsset]
+    /// One page (from 1) of the same search, newest first, for showing results as they're scrolled to.
+    func searchPage(_ query: CloudSearchQuery, page: Int) async throws -> CloudAssetPage
     func createSharedLink(assetIDs: [String], expiresAt: Date?) async throws -> CloudSharedLink
     func deleteSharedLink(id: String) async throws
     /// A URL anyone can stream one video from until `expiresAt` (AirPlay receivers fetch
@@ -127,8 +129,10 @@ public protocol CloudConnection: Sendable {
     func faces(inAsset assetID: String) async throws -> [CloudFace]
     /// Takes a face out of its photo, so the photo no longer counts as that person's.
     func removeFace(id: String) async throws
-    /// Search by meaning ("dog on a beach"), best matches first, narrowed by `filters` (album, visibility, photos or videos, favourites, people).
-    func smartSearch(_ text: String, filters: CloudSearchQuery, limit: Int) async throws -> [CloudAsset]
+    /// Search by meaning ("dog on a beach"), best matches first, narrowed by `filters` (album,
+    /// visibility, photos or videos, favourites, people): one page, from 1. Every photo matches
+    /// to some degree, so it's read page by page as results are scrolled to.
+    func smartSearch(_ text: String, filters: CloudSearchQuery, page: Int) async throws -> CloudAssetPage
     /// How many days deleted items stay in Recently Deleted.
     func trashRetentionDays() async throws -> Int
 }
